@@ -40,15 +40,13 @@ public extension View {
         let action: () async -> Void
 
         /// How far (in points) the content must be dragged past the top before
-        /// releasing triggers a refresh. Kept low so a short trackpad pull is enough.
-        private let threshold: CGFloat = 24
+        /// releasing triggers a refresh. Sized so there's a visible ramp between the
+        /// indicator appearing and arming, rather than snapping straight to armed.
+        private let threshold: CGFloat = 44
 
         /// 0…1 as the user drags past the top; drives the indicator's reveal.
         @State private var pull: CGFloat = 0
         @State private var isRefreshing = false
-        /// The indicator chevron's point size, scaled with the user's preferred text
-        /// size (tracking Caption 2) so it honors the accessibility setting.
-        @ScaledMetric(relativeTo: .caption2) private var chevronSize: CGFloat = 8
 
         func body(content: Content) -> some View {
             content
@@ -63,54 +61,113 @@ public extension View {
                         }
                     }
                 )
-                .overlay(alignment: .top) { indicator }
-        }
-
-        /// Whether the user has pulled far enough that releasing will refresh.
-        private var isArmed: Bool {
-            pull >= 1
-        }
-
-        @ViewBuilder
-        private var indicator: some View {
-            if isRefreshing || pull > 0 {
-                ZStack {
-                    if isRefreshing {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        // A ring that fills as the content is dragged toward the
-                        // threshold, with a chevron that flips up once armed to
-                        // signal "release to refresh".
-                        ZStack {
-                            Circle()
-                                .stroke(Color.secondary.opacity(0.25), lineWidth: 2)
-                            Circle()
-                                .trim(from: 0, to: pull)
-                                .stroke(Color.accentColor,
-                                        style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                                .rotationEffect(.degrees(-90))
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: chevronSize, weight: .bold))
-                                .foregroundStyle(isArmed ? Color.accentColor : Color.secondary)
-                                .rotationEffect(.degrees(isArmed ? 180 : 0))
-                        }
-                        .frame(width: 16, height: 16)
+                .overlay(alignment: .top) {
+                    // Visible whenever the user is mid-pull or a refresh is running.
+                    if isRefreshing || pull > 0 {
+                        PullIndicator(pull: pull, isRefreshing: isRefreshing)
                     }
                 }
-                .padding(7)
-                // A floating indicator above the scrolling list, so it gets Liquid
-                // Glass to refract the content sliding under it on macOS 26, keeping
-                // the opaque material as the macOS 15 fallback.
-                .floatingGlass(in: Circle(), fallback: .regularMaterial)
-                .overlay(Circle().stroke(Color.primary.opacity(0.08), lineWidth: 0.5))
-                .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
-                .scaleEffect(isRefreshing ? 1 : max(0.6, pull))
-                .opacity(isRefreshing ? 1 : Double(min(1, pull * 1.4)))
-                .padding(.top, 10)
-                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isRefreshing)
-                .animation(.easeOut(duration: 0.12), value: isArmed)
-                .allowsHitTesting(false)
+        }
+    }
+
+    /// The floating pull-to-refresh indicator: a ring that fills as the content is
+    /// dragged toward the threshold and then morphs into a spinning arc while the
+    /// refresh runs. Extracted from the modifier so it can be driven directly from
+    /// fixed `pull`/`isRefreshing` values (and rendered in a preview).
+    private struct PullIndicator: View {
+        /// 0…1 as the user drags past the top.
+        var pull: CGFloat
+        var isRefreshing: Bool
+
+        /// Drives the indeterminate spin while a refresh is in flight. Toggled on when
+        /// `isRefreshing` becomes true so the arc rotates continuously.
+        @State private var spin = false
+        /// The chevron's point size, scaled with the user's preferred text size
+        /// (tracking Caption 2) so it honors the accessibility setting.
+        @ScaledMetric(relativeTo: .caption2) private var chevronSize: CGFloat = 9
+
+        /// Whether the user has pulled far enough that releasing will refresh.
+        private var isArmed: Bool { pull >= 1 }
+
+        /// How much of the ring is drawn: it tracks the pull while dragging, then
+        /// settles to a short segment that spins as the indeterminate refresh arc.
+        private var arcEnd: CGFloat { isRefreshing ? 0.22 : pull }
+
+        /// Grows from a nub toward full size as the pull nears the threshold, with a
+        /// small pop once armed, then holds full size while refreshing.
+        private var indicatorScale: CGFloat {
+            if isRefreshing { return 1 }
+            return max(0.65, pull) * (isArmed ? 1.06 : 1)
+        }
+
+        /// Fades in with the pull and stays solid while refreshing.
+        private var indicatorOpacity: Double {
+            isRefreshing ? 1 : Double(min(1, pull * 1.4))
+        }
+
+        /// Slides the indicator down out of the top edge as the user drags, so it
+        /// follows the rubber-banding content instead of hanging at a fixed spot.
+        private var indicatorOffset: CGFloat {
+            (isRefreshing ? 1 : pull) * 14
+        }
+
+        var body: some View {
+            ZStack {
+                // The track the arc rides on.
+                Circle()
+                    .stroke(Color.secondary.opacity(0.2), lineWidth: 2.5)
+                // A single arc serves both roles: a determinate fill that follows
+                // the pull, then a short segment that spins during the refresh.
+                // Keeping one shape lets the two states morph into each other
+                // rather than swapping a ring out for a separate spinner.
+                Circle()
+                    .trim(from: 0, to: arcEnd)
+                    .stroke(Color.accentColor,
+                            style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .rotationEffect(.degrees(spin ? 360 : 0))
+                // The chevron flips up to signal "release to refresh", then fades
+                // out as the arc takes over the spinning role.
+                Image(systemName: "chevron.down")
+                    .font(.system(size: chevronSize, weight: .bold))
+                    .foregroundStyle(isArmed ? Color.accentColor : Color.secondary)
+                    // Stay flipped up while refreshing so it fades out pointing up
+                    // instead of rotating back down as the arc takes over.
+                    .rotationEffect(.degrees(isArmed || isRefreshing ? 180 : 0))
+                    .opacity(isRefreshing ? 0 : 1)
+                    .scaleEffect(isRefreshing ? 0.4 : 1)
+            }
+            .frame(width: 18, height: 18)
+            .padding(8)
+            // A floating indicator above the scrolling list, so it gets Liquid
+            // Glass to refract the content sliding under it on macOS 26, keeping
+            // the opaque material as the macOS 15 fallback.
+            .floatingGlass(in: Circle(), fallback: .regularMaterial)
+            .overlay(Circle().stroke(Color.primary.opacity(0.08), lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
+            .scaleEffect(indicatorScale)
+            .opacity(indicatorOpacity)
+            .offset(y: indicatorOffset)
+            .padding(.top, 6)
+            .animation(.spring(response: 0.35, dampingFraction: 0.6), value: isRefreshing)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isArmed)
+            .allowsHitTesting(false)
+            // Runs on appearance and each time `isRefreshing` flips (`.task(id:)` is
+            // available back to macOS 12, unlike the two-parameter `onChange`).
+            .task(id: isRefreshing) {
+                if isRefreshing {
+                    // Kick off the endless rotation that turns the progress arc
+                    // into an indeterminate spinner.
+                    withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
+                        spin = true
+                    }
+                } else {
+                    // Snap straight back to the resting angle; the indicator is
+                    // fading out at this point, so there's no need to unwind the spin.
+                    var stop = Transaction()
+                    stop.disablesAnimations = true
+                    withTransaction(stop) { spin = false }
+                }
             }
         }
     }
@@ -126,6 +183,30 @@ public extension View {
                 background(fallback, in: shape)
             }
         }
+    }
+
+    #Preview("Indicator states") {
+        HStack(spacing: 44) {
+            VStack { PullIndicator(pull: 0.5, isRefreshing: false); Text("pulling") }
+            VStack { PullIndicator(pull: 1, isRefreshing: false); Text("armed") }
+            VStack { PullIndicator(pull: 0, isRefreshing: true); Text("refreshing") }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(50)
+        .frame(width: 380, height: 160)
+    }
+
+    // Switch the canvas to Live mode, then drag the list down past the top with a
+    // trackpad to feel the real pull-to-refresh gesture end to end.
+    #Preview("Live — pull to refresh") {
+        List(0 ..< 20, id: \.self) { row in
+            Text("Row \(row)")
+        }
+        .macPullToRefresh {
+            try? await Task.sleep(for: .seconds(1.5))
+        }
+        .frame(width: 320, height: 400)
     }
 
     /// Locates the `NSScrollView` backing the SwiftUI container it is placed behind
@@ -178,6 +259,10 @@ public extension View {
 
             private weak var scrollView: NSScrollView?
             private var overscroll: CGFloat = 0
+            /// The furthest the content was dragged past the top during the current
+            /// live scroll. The instantaneous over-scroll eases back before the finger
+            /// lifts, so the release decision is made against this peak instead.
+            private var peakOverscroll: CGFloat = 0
             /// True only between `willStartLiveScroll` and `didEndLiveScroll`, i.e. while
             /// the user is actively scrolling. Bounds changes also fire during launch and
             /// programmatic layout, when the flipped clip view's origin can briefly dip
@@ -185,8 +270,24 @@ public extension View {
             /// indicator from appearing on its own at launch.
             private var isLiveScrolling = false
 
+            private var connectAttempts = 0
+
             func connect(from view: NSView) {
-                guard scrollView == nil, let scrollView = Self.scrollView(near: view) else { return }
+                guard scrollView == nil else { return }
+                guard let scrollView = Self.scrollView(near: view) else {
+                    // A `List` builds its `NSScrollView` a beat after this helper lands
+                    // in the window, so it isn't reachable at first attach. Retry on the
+                    // next runloop ticks until it exists (bounded so we give up rather
+                    // than spin forever if there genuinely is no scroll view).
+                    connectAttempts += 1
+                    if connectAttempts <= 60 {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak view] in
+                            guard let self, let view else { return }
+                            self.connect(from: view)
+                        }
+                    }
+                    return
+                }
 
                 self.scrollView = scrollView
                 // Guarantee rubber-banding at the top even when the list is short.
@@ -205,6 +306,7 @@ public extension View {
             @objc private func liveScrollStarted() {
                 isLiveScrolling = true
                 overscroll = 0
+                peakOverscroll = 0
             }
 
             @objc private func boundsChanged() {
@@ -215,11 +317,17 @@ public extension View {
                 // A `List` uses a flipped clip view, so the visible origin dips below
                 // zero as the content rubber-bands past the top edge.
                 overscroll = max(0, -scrollView.contentView.bounds.origin.y)
+                peakOverscroll = max(peakOverscroll, overscroll)
                 // This AppKit notification can fire while SwiftUI is mid-layout (e.g. when
                 // the list reloads), so defer the @State write to the next runloop tick to
-                // avoid "modifying state during view update". `overscroll` stays in sync
-                // synchronously, so the release trigger below remains accurate.
-                let newPull = min(1, overscroll / threshold)
+                // avoid "modifying state during view update". `overscroll`/`peakOverscroll`
+                // stay in sync synchronously, so the release trigger stays accurate.
+                //
+                // Drive the indicator from the peak, not the instantaneous over-scroll, so
+                // the ring/chevron latch once armed and match the peak-based release: the
+                // over-scroll eases back before the finger lifts, and tracking that live
+                // would flip the chevron back down even though releasing still refreshes.
+                let newPull = min(1, peakOverscroll / threshold)
                 DispatchQueue.main.async { [weak self] in
                     self?.pull?.wrappedValue = newPull
                 }
@@ -227,8 +335,12 @@ public extension View {
 
             @objc private func liveScrollEnded() {
                 isLiveScrolling = false
-                let shouldTrigger = overscroll >= threshold
+                // Decide on the peak reached during the drag: the over-scroll eases
+                // back before the finger lifts, so the instantaneous value here is
+                // often already below the threshold even after a firm pull.
+                let shouldTrigger = peakOverscroll >= threshold
                 overscroll = 0
+                peakOverscroll = 0
                 DispatchQueue.main.async { [weak self] in
                     self?.pull?.wrappedValue = 0
                     if shouldTrigger { self?.onTrigger() }

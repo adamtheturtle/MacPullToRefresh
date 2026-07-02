@@ -20,6 +20,17 @@ let package = Package(
                 .enableUpcomingFeature("InferIsolatedConformances")
             ]
         ),
+        // A tiny runnable app for trying the gesture live (⌘R the "Demo" scheme).
+        .executableTarget(
+            name: "Demo",
+            dependencies: ["MacPullToRefresh"],
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+                .defaultIsolation(MainActor.self),
+                .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+                .enableUpcomingFeature("InferIsolatedConformances")
+            ]
+        ),
         .testTarget(
             name: "MacPullToRefreshTests",
             dependencies: ["MacPullToRefresh"],
