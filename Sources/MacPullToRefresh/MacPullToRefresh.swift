@@ -24,7 +24,7 @@ public extension View {
     /// user pulls and spins while the refresh is in flight.
     ///
     /// On iOS the underlying `List`/`ScrollView` has a native pull-to-refresh, so this
-    /// simply wires `action` to `.refreshable` — call sites can apply it unconditionally.
+    /// simply wires `action` to `.refreshable` - call sites can apply it unconditionally.
     func macPullToRefresh(_ action: @escaping () async -> Void) -> some View {
         #if os(macOS)
             return modifier(MacPullToRefresh(action: action))
@@ -181,7 +181,7 @@ public extension View {
             /// True only between `willStartLiveScroll` and `didEndLiveScroll`, i.e. while
             /// the user is actively scrolling. Bounds changes also fire during launch and
             /// programmatic layout, when the flipped clip view's origin can briefly dip
-            /// negative as the list settles — gating the pull on a live scroll keeps the
+            /// negative as the list settles - gating the pull on a live scroll keeps the
             /// indicator from appearing on its own at launch.
             private var isLiveScrolling = false
 
@@ -239,7 +239,7 @@ public extension View {
             /// `.background` lands *inside* its scroll view, so the enclosing one is
             /// correct. A `List` instead places the background outside its scroll
             /// view, so fall back to the smallest scroll view in the window whose
-            /// frame sits under the helper — i.e. the one it fronts, not a
+            /// frame sits under the helper - i.e. the one it fronts, not a
             /// neighbouring pane's, which a naive descendant search can pick by
             /// mistake.
             private static func scrollView(near view: NSView) -> NSScrollView? {

@@ -17,7 +17,7 @@ import Testing
 struct MacPullToRefreshTests {
     @Test
     func `the modifier can be applied to a scrollable container`() {
-        // Compiles and returns a View unconditionally — the point of the cross-platform
+        // Compiles and returns a View unconditionally - the point of the cross-platform
         // API is that a call site applies it without an #if.
         let view = List { Text("row") }
             .macPullToRefresh { }

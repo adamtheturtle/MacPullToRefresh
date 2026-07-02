@@ -1,7 +1,9 @@
 # MacPullToRefresh
 
 A native-feeling **pull-to-refresh for macOS SwiftUI**, backed by the real `NSScrollView`
-rubber-band — and it works with `List`, not just `ScrollView`.
+rubber-band - and it works with `List`, not just `ScrollView`.
+
+[**API documentation**](https://swiftpackageindex.com/adamtheturtle/MacPullToRefresh/documentation/macpulltorefresh)
 
 SwiftUI's `.refreshable` compiles on macOS but **never fires from a gesture**: AppKit has
 no system pull-to-refresh control, so there's nothing for it to hook. The cross-platform
@@ -15,14 +17,14 @@ platforms without an `#if`.
 
 ## Why this one
 
-- **Native `NSScrollView` over-scroll** — hooks `willStartLiveScroll` / bounds changes, not
+- **Native `NSScrollView` over-scroll** - hooks `willStartLiveScroll` / bounds changes, not
   a hand-rolled offset hack, so pulls feel native.
-- **Works with SwiftUI `List`** — `List` places its background *outside* its scroll view, a
+- **Works with SwiftUI `List`** - `List` places its background *outside* its scroll view, a
   quirk that trips up naive introspection; MacPullToRefresh finds the right scroll view
   anyway. Plain `ScrollView` works too.
-- **Liquid Glass indicator** — the pull indicator uses `glassEffect` on macOS 26, with an
+- **Liquid Glass indicator** - the pull indicator uses `glassEffect` on macOS 26, with an
   opaque-material fallback on earlier systems.
-- **Polished** — a fill-as-you-pull ring with a "release to refresh" chevron, an
+- **Polished** - a fill-as-you-pull ring with a "release to refresh" chevron, an
   accessibility-scaled indicator (`@ScaledMetric`), `async` refresh actions, and live-scroll
   gating so it never false-triggers during launch or list reloads.
 
@@ -65,10 +67,10 @@ you never need to branch on platform.
 ## Testing note
 
 The heart of this package is an AppKit `NSScrollView` bridge, whose behavior (over-scroll
-tracking, live-scroll gating) needs a real window and run loop — exercise it in your app's
+tracking, live-scroll gating) needs a real window and run loop - exercise it in your app's
 UI tests. The included unit tests cover what's meaningful headlessly: the modifier applies
 to a view and doesn't run the action at build time.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE).
