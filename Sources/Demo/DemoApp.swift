@@ -19,7 +19,7 @@ struct DemoApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        WindowGroup("MacPullToRefresh Demo") {
+        WindowGroup("Pull down to refresh") {
             DemoView()
                 .frame(minWidth: 360, minHeight: 480)
         }
@@ -39,21 +39,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
 private struct DemoView: View {
     @State private var rows = Array(1 ... 20)
-    @State private var refreshCount = 0
 
     var body: some View {
-        List {
-            Section("Pull down to refresh · refreshed \(refreshCount)×") {
-                ForEach(rows, id: \.self) { row in
-                    Text("Row \(row)")
-                }
-            }
+        // Plain rows, no pinned section header — so the spinner clearly sits above the
+        // content and nothing crosses it during the pull. The row count doubles as
+        // visible proof each refresh ran.
+        List(rows, id: \.self) { row in
+            Text("Row \(row)")
         }
         .macPullToRefresh {
-            // Simulate a network round-trip so the spinner is visible, then
-            // prepend a fresh row as visible proof the refresh ran.
+            // Simulate a network round-trip so the spinner is visible, then prepend a
+            // fresh row as visible proof the refresh ran.
             try? await Task.sleep(for: .seconds(1.5))
-            refreshCount += 1
             let next = (rows.first ?? 0) - 1
             rows.insert(next, at: 0)
         }
