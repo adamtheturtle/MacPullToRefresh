@@ -49,20 +49,18 @@ public extension View {
         /// user releases, making the hand-off from the rubber-band nearly seamless.
         private let refreshGap: CGFloat = 44
 
-        /// 0…1 as the user drags past the top; drives the indicator's reveal.
-        @State private var pull: CGFloat = 0
         @State private var isRefreshing = false
 
         func body(content: Content) -> some View {
             content
                 .background(
                     // The bridge holds the gap open with the scroll view's own top
-                    // content inset while refreshing, so the content stays pinned on
-                    // release instead of snapping to the top — matching iOS.
+                    // content inset while refreshing, and hosts the indicator inside the
+                    // scroll view's clip view so it rides with the content lag-free — the
+                    // rows can never scroll over it, matching iOS.
                     PullToRefreshScrollBridge(threshold: threshold,
                                               refreshGap: refreshGap,
-                                              isRefreshing: isRefreshing,
-                                              pull: $pull) {
+                                              isRefreshing: isRefreshing) {
                         guard !isRefreshing else { return }
 
                         isRefreshing = true
@@ -72,26 +70,19 @@ public extension View {
                         }
                     }
                 )
-                .overlay(alignment: .top) {
-                    // Visible whenever the user is mid-pull or a refresh is running.
-                    if isRefreshing || pull > 0 {
-                        GeometryReader { proxy in
-                            PullIndicator(pull: pull, isRefreshing: isRefreshing)
-                                .frame(maxWidth: .infinity, alignment: .center)
-                                // The reserved gap opens below the scroll view's own top
-                                // inset (e.g. under a title bar), so start from there and
-                                // ramp down into the gap with the pull.
-                                .offset(y: proxy.safeAreaInsets.top
-                                    + (isRefreshing ? 1 : min(1, pull)) * 10)
-                        }
-                        // Fade out when the refresh ends rather than vanishing: the
-                        // indicator eases away as the gap collapses beneath it, matching
-                        // iOS. Keyed to `isRefreshing` only, so a live pull still tracks
-                        // the finger without a lagging fade.
-                        .transition(.opacity)
-                    }
-                }
-                .animation(.easeOut(duration: 0.3), value: isRefreshing)
+        }
+    }
+
+    /// Centres the ``PullIndicator`` within its bounds so it can be dropped straight
+    /// into the scroll view's clip view as a plain AppKit subview (via `NSHostingView`)
+    /// that scrolls with the content.
+    private struct HostedIndicator: View {
+        var pull: CGFloat
+        var isRefreshing: Bool
+
+        var body: some View {
+            PullIndicator(pull: pull, isRefreshing: isRefreshing)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -104,11 +95,12 @@ public extension View {
         var pull: CGFloat
         var isRefreshing: Bool
 
-        /// Continuous rotation angle, driven while a refresh is in flight.
-        @State private var angle: Double = 0
         /// The indicator's side length, scaled with the user's preferred text size
         /// (tracking Caption 2) so it honors the accessibility setting.
         @ScaledMetric(relativeTo: .caption2) private var side: CGFloat = 24
+
+        /// Seconds per full revolution while spinning.
+        private let period: Double = 1.7
 
         /// Spin the moment the pull reaches the top — i.e. as soon as it's armed and
         /// fully revealed (`pull >= 1`) — and keep spinning through the release and the
@@ -117,29 +109,33 @@ public extension View {
         private var spinning: Bool { isRefreshing || pull >= 1 }
 
         var body: some View {
-            SpokeWheel(reveal: pull, spinning: spinning, side: side)
-                .rotationEffect(.degrees(angle))
-                // Fade and grow in with the pull, matching iOS; solid while refreshing.
-                .opacity(isRefreshing ? 1 : Double(min(1, pull * 1.2)))
-                .scaleEffect(isRefreshing ? 1 : max(0.7, min(1, pull)))
-                .animation(.easeOut(duration: 0.2), value: isRefreshing)
-                .allowsHitTesting(false)
-                // Runs on appearance and each time `spinning` flips (`.task(id:)` is
-                // available back to macOS 12, unlike the two-parameter `onChange`).
-                .task(id: spinning) {
-                    if spinning {
-                        // Spin the fixed spoke fade around to read as an indeterminate
-                        // activity indicator.
-                        withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
-                            angle = 360
-                        }
-                    } else {
-                        // Snap back to rest; the indicator is fading out anyway.
-                        var stop = Transaction()
-                        stop.disablesAnimations = true
-                        withTransaction(stop) { angle = 0 }
+            Group {
+                if spinning {
+                    // Drive the rotation off a steady timeline clock rather than a
+                    // `repeatForever` animation. Hosted in an `NSView` and carried along
+                    // by the scroll, that animation visibly stutters and changes pace
+                    // whenever the view re-renders or the content moves; an angle derived
+                    // from the wall clock stays perfectly linear regardless.
+                    TimelineView(.animation) { context in
+                        SpokeWheel(reveal: pull, spinning: true, side: side)
+                            .rotationEffect(.degrees(angle(at: context.date)))
                     }
+                } else {
+                    SpokeWheel(reveal: pull, spinning: false, side: side)
                 }
+            }
+            // Fade and grow in with the pull, matching iOS; solid while refreshing.
+            .opacity(isRefreshing ? 1 : Double(min(1, pull * 1.2)))
+            .scaleEffect(isRefreshing ? 1 : max(0.7, min(1, pull)))
+            .animation(.easeOut(duration: 0.2), value: isRefreshing)
+            .allowsHitTesting(false)
+        }
+
+        /// A linear 0…360° angle derived from the wall clock, wrapping every `period`
+        /// seconds so the spin never speeds up, slows, or jumps at a cycle boundary.
+        private func angle(at date: Date) -> Double {
+            let t = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period)
+            return t / period * 360
         }
     }
 
@@ -208,7 +204,6 @@ public extension View {
         let threshold: CGFloat
         let refreshGap: CGFloat
         let isRefreshing: Bool
-        @Binding var pull: CGFloat
         let onTrigger: () -> Void
 
         func makeNSView(context: Context) -> ScrollFinderView {
@@ -228,7 +223,6 @@ public extension View {
             let coordinator = context.coordinator
             coordinator.threshold = threshold
             coordinator.refreshGap = refreshGap
-            coordinator.pull = $pull
             coordinator.onTrigger = onTrigger
             // Retry in case the scroll view wasn't reachable at first window attach.
             coordinator.connect(from: nsView)
@@ -236,6 +230,8 @@ public extension View {
             // finishes (the true -> false edge).
             if coordinator.wasRefreshing, !isRefreshing { coordinator.closeGap() }
             coordinator.wasRefreshing = isRefreshing
+            // Drive the hosted indicator's spin/fade from the refresh flag.
+            coordinator.setRefreshing(isRefreshing)
         }
 
         func makeCoordinator() -> Coordinator {
@@ -256,8 +252,14 @@ public extension View {
         final class Coordinator: NSObject {
             var threshold: CGFloat = 80
             var refreshGap: CGFloat = 44
-            var pull: Binding<CGFloat>?
             var onTrigger: () -> Void = {}
+
+            /// The indicator, hosted as a subview of the scroll view's clip view so it
+            /// scrolls with the content. Driven directly (no SwiftUI state round-trip),
+            /// so it never lags behind the rows.
+            private var indicator: NSHostingView<HostedIndicator>?
+            private var currentPull: CGFloat = 0
+            private var currentRefreshing = false
 
             private weak var scrollView: NSScrollView?
             private var overscroll: CGFloat = 0
@@ -311,6 +313,50 @@ public extension View {
                                    name: NSScrollView.willStartLiveScrollNotification, object: scrollView)
                 center.addObserver(self, selector: #selector(liveScrollEnded),
                                    name: NSScrollView.didEndLiveScrollNotification, object: scrollView)
+                attachIndicator(to: scrollView)
+            }
+
+            /// Drops the hosted indicator into the clip view, occupying the gap band
+            /// directly above the content's top edge. As a clip-view subview it is
+            /// carried along by every scroll — including momentum — in the same pass as
+            /// the rows, so it stays glued just above the first row with no lag and clips
+            /// away at the top edge as it rides off.
+            private func attachIndicator(to scrollView: NSScrollView) {
+                guard indicator == nil else { return }
+                let host = NSHostingView(rootView: HostedIndicator(pull: 0, isRefreshing: false))
+                host.autoresizingMask = [.width]
+                indicator = host
+                let clip = scrollView.contentView
+                clip.addSubview(host)
+                positionIndicator()
+            }
+
+            /// Sizes the indicator to the gap band `[-refreshGap, 0]` in the clip view's
+            /// (flipped) coordinates — i.e. `refreshGap` points immediately above the
+            /// content's top edge (`y == 0`). It's off-screen above the top at rest and
+            /// slides into view as the content rubber-bands or the gap opens.
+            private func positionIndicator() {
+                guard let indicator, let clip = scrollView?.contentView else { return }
+                indicator.frame = NSRect(x: 0, y: -refreshGap,
+                                         width: clip.bounds.width, height: refreshGap)
+            }
+
+            private func setPull(_ value: CGFloat) {
+                currentPull = value
+                indicator?.rootView = HostedIndicator(pull: value, isRefreshing: currentRefreshing)
+            }
+
+            func setRefreshing(_ value: Bool) {
+                guard let indicator else { currentRefreshing = value; return }
+                // Keep the indicator on top and correctly placed in case the List rebuilt
+                // its clip-view contents between updates.
+                if indicator.superview !== scrollView?.contentView, let clip = scrollView?.contentView {
+                    clip.addSubview(indicator)
+                }
+                positionIndicator()
+                guard value != currentRefreshing else { return }
+                currentRefreshing = value
+                indicator.rootView = HostedIndicator(pull: currentPull, isRefreshing: value)
             }
 
             @objc private func liveScrollStarted() {
@@ -324,13 +370,20 @@ public extension View {
             }
 
             @objc private func boundsChanged() {
+                guard let scrollView else { return }
+
+                // The hosted indicator is a clip-view subview, so AppKit already carries
+                // it along with this scroll — nothing to reposition here. While a refresh
+                // runs the pull is over, so there's no reveal to update either.
+                if wasRefreshing { return }
+
                 // Ignore bounds changes that aren't part of a user scroll (launch, list
                 // reloads, programmatic layout) so the indicator only reveals on a pull.
-                guard isLiveScrolling, let scrollView else { return }
+                guard isLiveScrolling else { return }
 
                 // A `List` uses a flipped clip view, so the visible origin dips below
                 // zero as the content rubber-bands past the top edge. Subtract the
-                // resting inset so a pull is measured from the true top.
+                // resting inset so a pull is measured from the true content top.
                 overscroll = max(0, -scrollView.contentView.bounds.origin.y - baselineTopInset)
                 peakOverscroll = max(peakOverscroll, overscroll)
                 // Reserve the gap the instant the pull crosses the threshold — while the
@@ -340,13 +393,10 @@ public extension View {
                 // release is too late: AppKit has already latched the old top as its
                 // bounce target, and the rows yank up through the spinner before easing
                 // back down.
-                if overscroll >= threshold, !gapOpen, !wasRefreshing { openGap() }
-                // Reveal the spokes in step with the pull; deferred to the next runloop
-                // tick to avoid mutating @State mid-layout.
-                let newPull = min(1, peakOverscroll / threshold)
-                DispatchQueue.main.async { [weak self] in
-                    self?.pull?.wrappedValue = newPull
-                }
+                if overscroll >= threshold, !gapOpen { openGap() }
+                // Reveal the spokes in step with the pull. Driven straight into the hosted
+                // view (no SwiftUI state round-trip) so it stays in lock-step with the drag.
+                setPull(min(1, peakOverscroll / threshold))
             }
 
             @objc private func liveScrollEnded() {
@@ -357,10 +407,8 @@ public extension View {
                 let shouldTrigger = gapOpen
                 overscroll = 0
                 peakOverscroll = 0
-                DispatchQueue.main.async { [weak self] in
-                    self?.pull?.wrappedValue = 0
-                    if shouldTrigger { self?.onTrigger() }
-                }
+                setPull(0)
+                if shouldTrigger { onTrigger() }
             }
 
             /// Reserves the top gap by enlarging the scroll view's top content inset.
