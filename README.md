@@ -18,7 +18,7 @@ arms once you pass the threshold, and spins while the refresh runs.
 ## Installation
 
 ```swift
-.package(url: "https://github.com/adamtheturtle/MacPullToRefresh.git", from: "0.1.0")
+.package(url: "https://github.com/adamtheturtle/MacPullToRefresh.git", from: "0.2.0")
 ```
 
 Add the `MacPullToRefresh` product to your target dependencies.
