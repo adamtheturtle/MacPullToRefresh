@@ -21,7 +21,9 @@ public extension View {
     /// On macOS this bridges to the `NSScrollView` underneath the SwiftUI container: it
     /// tracks how far the content rubber-bands past its top edge and, when the user
     /// releases beyond a threshold, runs `action`. A circular indicator fades in as the
-    /// user pulls and spins while the refresh is in flight.
+    /// user pulls and spins while the refresh is in flight. Dragging back toward the top
+    /// before releasing cancels the gesture without running `action`, as the equivalent
+    /// iOS gesture does.
     ///
     /// On iOS the underlying `List`/`ScrollView` has a native pull-to-refresh, so this
     /// simply wires `action` to `.refreshable` - call sites can apply it unconditionally.
@@ -200,7 +202,10 @@ public extension View {
 
     /// Locates the `NSScrollView` backing the SwiftUI container it is placed behind
     /// and reports over-scroll past the top edge back to SwiftUI.
-    private struct PullToRefreshScrollBridge: NSViewRepresentable {
+    /// Internal rather than private so the gesture state machine in ``Coordinator`` can be
+    /// driven directly from tests against a real `NSScrollView`, without a window or a
+    /// live trackpad gesture.
+    struct PullToRefreshScrollBridge: NSViewRepresentable {
         let threshold: CGFloat
         let refreshGap: CGFloat
         let isRefreshing: Bool
@@ -258,22 +263,34 @@ public extension View {
             /// scrolls with the content. Driven directly (no SwiftUI state round-trip),
             /// so it never lags behind the rows.
             private var indicator: NSHostingView<HostedIndicator>?
-            private var currentPull: CGFloat = 0
-            private var currentRefreshing = false
+            private(set) var currentPull: CGFloat = 0
+            private(set) var currentRefreshing = false
 
             private weak var scrollView: NSScrollView?
             private var overscroll: CGFloat = 0
             /// Whether the top gap is currently held open by an added content inset.
-            private var gapOpen = false
+            private(set) var gapOpen = false
+            /// True while ``closeGap()``'s 0.3s animation is in flight. The enlarged gap
+            /// inset is deliberately left in place for its whole duration, so the scroll
+            /// view's top inset does not describe the baseline during this window and must
+            /// not be mistaken for it.
+            private(set) var isClosingGap = false
+            /// Set when a release armed a refresh. The pull is deliberately left at full
+            /// reveal until the refresh flag round-trips back through SwiftUI, so the
+            /// indicator never renders as "not pulling, not refreshing" — which is fully
+            /// transparent — for the frames in between.
+            private var awaitingRefreshHandoff = false
             /// Tracks the refresh flag across `updateNSView` calls so the gap closes on
             /// the refresh-finished edge.
             var wasRefreshing = false
             /// The scroll view's own top inset before the gap is added, so it can be
             /// restored afterwards (e.g. an inset the system keeps under a title bar).
-            private var baselineTopInset: CGFloat = 0
-            /// The furthest the content was dragged past the top during the current
-            /// live scroll. The instantaneous over-scroll eases back before the finger
-            /// lifts, so the release decision is made against this peak instead.
+            private(set) var baselineTopInset: CGFloat = 0
+            /// The furthest the content was dragged past the top during the current live
+            /// scroll. The reveal is driven from this peak rather than the instantaneous
+            /// over-scroll so the spokes don't flicker back and forth on the jitter of a
+            /// drag. (The release *decision* is made on the instantaneous value, so that
+            /// deliberately dragging back to the top cancels the gesture.)
             private var peakOverscroll: CGFloat = 0
             /// True only between `willStartLiveScroll` and `didEndLiveScroll`, i.e. while
             /// the user is actively scrolling. Bounds changes also fire during launch and
@@ -356,7 +373,14 @@ public extension View {
                 positionIndicator()
                 guard value != currentRefreshing else { return }
                 currentRefreshing = value
-                indicator.rootView = HostedIndicator(pull: currentPull, isRefreshing: value)
+                // The refresh flag has landed, so the pull it was handed off from has
+                // done its job. Clear it in the same render as the flag change: while
+                // `isRefreshing` is true the indicator is solid and spinning regardless of
+                // the pull, and on the way back down a stale pull of 1 would otherwise
+                // keep the wheel spinning after the refresh ended.
+                awaitingRefreshHandoff = false
+                currentPull = 0
+                indicator.rootView = HostedIndicator(pull: 0, isRefreshing: value)
             }
 
             @objc private func liveScrollStarted() {
@@ -365,8 +389,11 @@ public extension View {
                 peakOverscroll = 0
                 // Capture the resting top inset (e.g. under a title bar) at the start of
                 // the pull, before any gap is added, so over-scroll is measured from the
-                // true content top rather than from that inset.
-                if !gapOpen, let scrollView { baselineTopInset = scrollView.contentInsets.top }
+                // true content top rather than from that inset. While a gap is open — or
+                // still being closed, which holds the enlarged inset in place for the
+                // whole animation — the current inset is the gap, not the baseline, so
+                // re-capturing it here would latch the gap into the baseline permanently.
+                if !gapOpen, !isClosingGap, let scrollView { baselineTopInset = scrollView.contentInsets.top }
             }
 
             @objc private func boundsChanged() {
@@ -399,16 +426,56 @@ public extension View {
                 setPull(min(1, peakOverscroll / threshold))
             }
 
+            /// The over-scroll at which the pull still counts as armed when the finger
+            /// lifts.
+            ///
+            /// Once the gap is reserved the content's resting position sits `refreshGap`
+            /// past the true content top, so the elastic eases back to `refreshGap` rather
+            /// than to zero and an ordinary release must not read as a cancel — hence the
+            /// lower bar (and a hair of tolerance for rounding) while the gap is open.
+            /// Dragging back *through* that resting position, toward the content top, is
+            /// unambiguously a cancel.
+            private var releaseArmingOverscroll: CGFloat {
+                gapOpen ? min(threshold, refreshGap) - 0.5 : threshold
+            }
+
             @objc private func liveScrollEnded() {
                 isLiveScrolling = false
-                // The gap was reserved mid-drag the moment the pull crossed the
-                // threshold, so its being open is exactly the "should refresh" signal.
-                // The scroll view now settles its own elastic bounce into that gap.
-                let shouldTrigger = gapOpen
+                // Decide on the over-scroll as it actually stands at release rather than
+                // on `gapOpen`, which latches at the threshold crossing and never clears:
+                // a user who pulls past the threshold, changes their mind and drags back
+                // to the top before releasing has cancelled the gesture, as on iOS.
+                let shouldTrigger = overscroll >= releaseArmingOverscroll
                 overscroll = 0
                 peakOverscroll = 0
-                setPull(0)
-                if shouldTrigger { onTrigger() }
+                if shouldTrigger {
+                    // Leave the pull at full reveal across the hand-off: `currentRefreshing`
+                    // only flips once `setRefreshing(true)` arrives via `updateNSView`, and
+                    // zeroing the pull before then renders the indicator at opacity 0 for
+                    // those frames, blinking it out exactly where it should come alive.
+                    awaitingRefreshHandoff = true
+                    onTrigger()
+                    scheduleHandoffFallback()
+                } else {
+                    setPull(0)
+                    // The gap was reserved mid-drag on the threshold crossing, so a
+                    // cancelled pull leaves it open with no refresh to fill it. Take it
+                    // back down the same way a finished refresh does.
+                    closeGap()
+                }
+            }
+
+            /// Clears a pull left at full reveal for a hand-off that never happened — the
+            /// refresh finished before SwiftUI could round-trip the flag, or the trigger
+            /// was swallowed because one was already in flight. Without this the indicator
+            /// would sit on screen spinning with nothing behind it.
+            private func scheduleHandoffFallback() {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    guard let self, self.awaitingRefreshHandoff else { return }
+                    self.awaitingRefreshHandoff = false
+                    guard !self.currentRefreshing, !self.isLiveScrolling else { return }
+                    self.setPull(0)
+                }
             }
 
             /// Reserves the top gap by enlarging the scroll view's top content inset.
@@ -429,6 +496,12 @@ public extension View {
             func closeGap() {
                 guard let scrollView, gapOpen else { return }
                 gapOpen = false
+                isClosingGap = true
+                // Capture the baseline now, while it is still known to be the baseline.
+                // Re-reading `self.baselineTopInset` in the completion handler instead
+                // reads it 300ms later, by which time a scroll started during the
+                // animation may have re-captured it from the still-enlarged gap inset.
+                let baseline = baselineTopInset
                 let clip = scrollView.contentView
                 NSAnimationContext.runAnimationGroup { context in
                     context.duration = 0.3
@@ -440,15 +513,21 @@ public extension View {
                     // Lowering the inset up front instead makes AppKit snap the origin to
                     // the new resting top immediately, so the content jumps before this
                     // animation can run.
-                    clip.animator().setBoundsOrigin(NSPoint(x: clip.bounds.origin.x, y: -baselineTopInset))
+                    clip.animator().setBoundsOrigin(NSPoint(x: clip.bounds.origin.x, y: -baseline))
                     scrollView.reflectScrolledClipView(clip)
                 } completionHandler: { [weak self] in
                     Task { @MainActor in
-                        guard let self, let scrollView = self.scrollView else { return }
+                        guard let self else { return }
+                        self.isClosingGap = false
+                        guard let scrollView = self.scrollView else { return }
+                        // A fresh pull may have re-opened the gap while this animation ran,
+                        // in which case the enlarged inset it just installed is the current
+                        // truth and must be left alone.
+                        guard !self.gapOpen else { return }
                         // The content has arrived at the resting top; removing the gap
                         // inset now doesn't shift it further (position tracks the origin,
                         // not the inset), so the hand-off is seamless.
-                        scrollView.contentInsets.top = self.baselineTopInset
+                        scrollView.contentInsets.top = baseline
                         scrollView.automaticallyAdjustsContentInsets = true
                     }
                 }
