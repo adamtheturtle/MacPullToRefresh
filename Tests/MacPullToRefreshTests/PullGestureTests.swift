@@ -91,6 +91,32 @@
     @MainActor
     struct PullGestureTests {
         @Test
+        func `refresh indicator exposes meaningful accessibility states`() {
+            #expect(HostedIndicator.accessibilityStatus(pull: 0.5, isRefreshing: false) == "Pulling")
+            #expect(HostedIndicator.accessibilityStatus(pull: 1, isRefreshing: false) == "Ready")
+            #expect(HostedIndicator.accessibilityStatus(pull: 0, isRefreshing: true) == "Refreshing")
+        }
+
+        @Test
+        func `refresh indicator respects Reduce Motion`() {
+            #expect(PullIndicator.continuouslyRotates(
+                pull: 1,
+                isRefreshing: false,
+                reduceMotion: false
+            ))
+            #expect(!PullIndicator.continuouslyRotates(
+                pull: 1,
+                isRefreshing: false,
+                reduceMotion: true
+            ))
+            #expect(!PullIndicator.continuouslyRotates(
+                pull: 0,
+                isRefreshing: true,
+                reduceMotion: true
+            ))
+        }
+
+        @Test
         func `releasing past the threshold triggers a refresh`() {
             let harness = PullHarness()
             var triggered = 0
