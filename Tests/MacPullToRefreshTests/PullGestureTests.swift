@@ -34,14 +34,23 @@
     private struct PullHarness {
         let scrollView: NSScrollView
         let coordinator: PullToRefreshScrollBridge.Coordinator
+        let finder: NSView
         let threshold: CGFloat = 44
 
-        init(baselineTopInset: CGFloat = 0) {
+        init(
+            baselineTopInset: CGFloat = 0,
+            automaticallyAdjustsContentInsets: Bool = false,
+            verticalScrollElasticity: NSScrollView.Elasticity = .automatic,
+            postsBoundsChangedNotifications: Bool = false,
+            coordinator: PullToRefreshScrollBridge.Coordinator? = nil
+        ) {
             let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 300, height: 400))
             scrollView.contentView = UnconstrainedClipView(frame: scrollView.bounds)
             let document = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 2000))
             scrollView.documentView = document
-            scrollView.automaticallyAdjustsContentInsets = false
+            scrollView.automaticallyAdjustsContentInsets = automaticallyAdjustsContentInsets
+            scrollView.verticalScrollElasticity = verticalScrollElasticity
+            scrollView.contentView.postsBoundsChangedNotifications = postsBoundsChangedNotifications
             scrollView.contentInsets.top = baselineTopInset
             self.scrollView = scrollView
 
@@ -49,8 +58,9 @@
             // view inside the document is enough - no window required.
             let finder = NSView(frame: .zero)
             document.addSubview(finder)
+            self.finder = finder
 
-            let coordinator = PullToRefreshScrollBridge.Coordinator()
+            let coordinator = coordinator ?? PullToRefreshScrollBridge.Coordinator()
             coordinator.threshold = threshold
             coordinator.refreshGap = threshold
             coordinator.connect(from: finder)
@@ -263,6 +273,83 @@
             harness.coordinator.setRefreshing(false)
 
             #expect(harness.coordinator.currentPull == 0)
+        }
+
+        @Test
+        func `disconnect during refresh restores every host mutation`() {
+            let harness = PullHarness(
+                baselineTopInset: 20,
+                automaticallyAdjustsContentInsets: true,
+                verticalScrollElasticity: .none,
+                postsBoundsChangedNotifications: false
+            )
+            let originalInsets = harness.scrollView.contentInsets
+            let originalSubviewCount = harness.scrollView.contentView.subviews.count - 1
+
+            harness.beginPull()
+            harness.drag(past: 60)
+            harness.release()
+            harness.coordinator.setRefreshing(true)
+            #expect(harness.scrollView.contentInsets.top == 64)
+            #expect(harness.scrollView.verticalScrollElasticity == .allowed)
+            #expect(harness.scrollView.contentView.postsBoundsChangedNotifications)
+
+            harness.coordinator.disconnect()
+
+            #expect(harness.scrollView.contentInsets.top == originalInsets.top)
+            #expect(harness.scrollView.contentInsets.left == originalInsets.left)
+            #expect(harness.scrollView.contentInsets.bottom == originalInsets.bottom)
+            #expect(harness.scrollView.contentInsets.right == originalInsets.right)
+            #expect(harness.scrollView.automaticallyAdjustsContentInsets)
+            #expect(harness.scrollView.verticalScrollElasticity == .none)
+            #expect(!harness.scrollView.contentView.postsBoundsChangedNotifications)
+            #expect(harness.scrollView.contentView.subviews.count == originalSubviewCount)
+            #expect(!harness.coordinator.gapOpen)
+            #expect(!harness.coordinator.currentRefreshing)
+        }
+
+        @Test
+        func `disconnect while closing restores a host that disabled automatic insets`() {
+            let harness = PullHarness(
+                baselineTopInset: 12,
+                automaticallyAdjustsContentInsets: false
+            )
+
+            harness.beginPull()
+            harness.drag(past: 60)
+            harness.release()
+            harness.coordinator.closeGap()
+            #expect(harness.coordinator.isClosingGap)
+
+            harness.coordinator.disconnect()
+
+            #expect(harness.scrollView.contentInsets.top == 12)
+            #expect(!harness.scrollView.automaticallyAdjustsContentInsets)
+            #expect(!harness.coordinator.isClosingGap)
+        }
+
+        @Test
+        func `connecting after a hierarchy replacement detaches the old scroll view`() {
+            let coordinator = PullToRefreshScrollBridge.Coordinator()
+            let first = PullHarness(
+                baselineTopInset: 8,
+                verticalScrollElasticity: .none,
+                coordinator: coordinator
+            )
+            let second = PullHarness(
+                baselineTopInset: 16,
+                verticalScrollElasticity: .automatic,
+                coordinator: coordinator
+            )
+
+            #expect(first.scrollView.contentInsets.top == 8)
+            #expect(first.scrollView.verticalScrollElasticity == .none)
+            #expect(!first.scrollView.contentView.postsBoundsChangedNotifications)
+            #expect(second.scrollView.verticalScrollElasticity == .allowed)
+            #expect(second.scrollView.contentView.postsBoundsChangedNotifications)
+            coordinator.disconnect()
+            #expect(second.scrollView.contentInsets.top == 16)
+            #expect(second.scrollView.verticalScrollElasticity == .automatic)
         }
     }
 #endif
