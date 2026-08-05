@@ -200,6 +200,9 @@ public extension View {
         .frame(width: 320, height: 400)
     }
 
+    // The coordinator intentionally keeps the complete AppKit lifecycle and gesture
+    // state machine together so every mutation is restored by one disconnect path.
+    // swiftlint:disable type_body_length
     /// Locates the `NSScrollView` backing the SwiftUI container it is placed behind
     /// and reports over-scroll past the top edge back to SwiftUI.
     /// Internal rather than private so the gesture state machine in ``Coordinator`` can be
@@ -239,6 +242,11 @@ public extension View {
             coordinator.setRefreshing(isRefreshing)
         }
 
+        static func dismantleNSView(_ nsView: ScrollFinderView, coordinator: Coordinator) {
+            nsView.onMoveToWindow = nil
+            coordinator.disconnect()
+        }
+
         func makeCoordinator() -> Coordinator {
             Coordinator()
         }
@@ -267,6 +275,13 @@ public extension View {
             private(set) var currentRefreshing = false
 
             private weak var scrollView: NSScrollView?
+            private var originalContentInsets: NSEdgeInsets?
+            private var originalAutoInsets: Bool?
+            private var originalVerticalScrollElasticity: NSScrollView.Elasticity?
+            private var originalPostsBoundsChangedNotifications: Bool?
+            /// Invalidates animation completions and delayed connection attempts after a
+            /// disconnect or reconnection.
+            private var connectionGeneration = 0
             private var overscroll: CGFloat = 0
             /// Whether the top gap is currently held open by an added content inset.
             private(set) var gapOpen = false
@@ -302,35 +317,96 @@ public extension View {
             private var connectAttempts = 0
 
             func connect(from view: NSView) {
-                guard scrollView == nil else { return }
-                guard let scrollView = Self.scrollView(near: view) else {
+                guard let candidate = Self.scrollView(near: view) else {
+                    if scrollView != nil {
+                        disconnect()
+                    }
                     // A `List` builds its `NSScrollView` a beat after this helper lands
                     // in the window, so it isn't reachable at first attach. Retry on the
                     // next runloop ticks until it exists (bounded so we give up rather
                     // than spin forever if there genuinely is no scroll view).
                     connectAttempts += 1
                     if connectAttempts <= 60 {
+                        let generation = connectionGeneration
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak view] in
-                            guard let self, let view else { return }
+                            guard let self, let view,
+                                  self.connectionGeneration == generation
+                            else { return }
                             self.connect(from: view)
                         }
                     }
                     return
                 }
+                guard candidate !== scrollView else { return }
 
-                self.scrollView = scrollView
+                if scrollView != nil || indicator != nil {
+                    disconnect()
+                }
+
+                connectAttempts = 0
+                connectionGeneration += 1
+                scrollView = candidate
+                originalContentInsets = candidate.contentInsets
+                originalAutoInsets = candidate.automaticallyAdjustsContentInsets
+                originalVerticalScrollElasticity = candidate.verticalScrollElasticity
+                originalPostsBoundsChangedNotifications = candidate.contentView.postsBoundsChangedNotifications
+                baselineTopInset = candidate.contentInsets.top
                 // Guarantee rubber-banding at the top even when the list is short.
-                scrollView.verticalScrollElasticity = .allowed
-                let clip = scrollView.contentView
+                candidate.verticalScrollElasticity = .allowed
+                let clip = candidate.contentView
                 clip.postsBoundsChangedNotifications = true
                 let center = NotificationCenter.default
                 center.addObserver(self, selector: #selector(boundsChanged),
                                    name: NSView.boundsDidChangeNotification, object: clip)
                 center.addObserver(self, selector: #selector(liveScrollStarted),
-                                   name: NSScrollView.willStartLiveScrollNotification, object: scrollView)
+                                   name: NSScrollView.willStartLiveScrollNotification, object: candidate)
                 center.addObserver(self, selector: #selector(liveScrollEnded),
-                                   name: NSScrollView.didEndLiveScrollNotification, object: scrollView)
-                attachIndicator(to: scrollView)
+                                   name: NSScrollView.didEndLiveScrollNotification, object: candidate)
+                attachIndicator(to: candidate)
+            }
+
+            /// Stops observing the current host and restores every AppKit property the
+            /// bridge changed. This is synchronous so removal during a refresh or closing
+            /// animation cannot leave a surviving scroll view in a modified state.
+            func disconnect() {
+                connectionGeneration += 1
+                // Reconnection is an explicit lifecycle boundary, not deallocation;
+                // keeping the old notifications would deliver stale scroll events.
+                // swiftlint:disable:next notification_center_detachment
+                NotificationCenter.default.removeObserver(self)
+                indicator?.removeFromSuperview()
+                indicator = nil
+
+                if let scrollView {
+                    if let originalAutoInsets {
+                        scrollView.automaticallyAdjustsContentInsets = originalAutoInsets
+                    }
+                    if let originalContentInsets {
+                        scrollView.contentInsets = originalContentInsets
+                    }
+                    if let originalVerticalScrollElasticity {
+                        scrollView.verticalScrollElasticity = originalVerticalScrollElasticity
+                    }
+                    if let originalPostsBoundsChangedNotifications {
+                        scrollView.contentView.postsBoundsChangedNotifications =
+                            originalPostsBoundsChangedNotifications
+                    }
+                }
+
+                scrollView = nil
+                originalContentInsets = nil
+                originalAutoInsets = nil
+                originalVerticalScrollElasticity = nil
+                originalPostsBoundsChangedNotifications = nil
+                currentPull = 0
+                currentRefreshing = false
+                overscroll = 0
+                peakOverscroll = 0
+                gapOpen = false
+                isClosingGap = false
+                awaitingRefreshHandoff = false
+                wasRefreshing = false
+                isLiveScrolling = false
             }
 
             /// Drops the hosted indicator into the clip view, occupying the gap band
@@ -340,7 +416,11 @@ public extension View {
             /// away at the top edge as it rides off.
             private func attachIndicator(to scrollView: NSScrollView) {
                 guard indicator == nil else { return }
-                let host = NSHostingView(rootView: HostedIndicator(pull: 0, isRefreshing: false))
+
+                let host = NSHostingView(rootView: HostedIndicator(
+                    pull: currentPull,
+                    isRefreshing: currentRefreshing
+                ))
                 host.autoresizingMask = [.width]
                 indicator = host
                 let clip = scrollView.contentView
@@ -354,6 +434,7 @@ public extension View {
             /// slides into view as the content rubber-bands or the gap opens.
             private func positionIndicator() {
                 guard let indicator, let clip = scrollView?.contentView else { return }
+
                 indicator.frame = NSRect(x: 0, y: -refreshGap,
                                          width: clip.bounds.width, height: refreshGap)
             }
@@ -365,6 +446,7 @@ public extension View {
 
             func setRefreshing(_ value: Bool) {
                 guard let indicator else { currentRefreshing = value; return }
+
                 // Keep the indicator on top and correctly placed in case the List rebuilt
                 // its clip-view contents between updates.
                 if indicator.superview !== scrollView?.contentView, let clip = scrollView?.contentView {
@@ -372,6 +454,7 @@ public extension View {
                 }
                 positionIndicator()
                 guard value != currentRefreshing else { return }
+
                 currentRefreshing = value
                 // The refresh flag has landed, so the pull it was handed off from has
                 // done its job. Clear it in the same render as the flag change: while
@@ -488,6 +571,7 @@ public extension View {
             /// animating it here is what made the content fight the elastic and bounce.
             private func openGap() {
                 guard let scrollView, !gapOpen else { return }
+
                 gapOpen = true
                 scrollView.automaticallyAdjustsContentInsets = false
                 scrollView.contentInsets.top = baselineTopInset + refreshGap
@@ -495,6 +579,7 @@ public extension View {
 
             func closeGap() {
                 guard let scrollView, gapOpen else { return }
+
                 gapOpen = false
                 isClosingGap = true
                 // Capture the baseline now, while it is still known to be the baseline.
@@ -503,6 +588,7 @@ public extension View {
                 // animation may have re-captured it from the still-enlarged gap inset.
                 let baseline = baselineTopInset
                 let clip = scrollView.contentView
+                let generation = connectionGeneration
                 NSAnimationContext.runAnimationGroup { context in
                     context.duration = 0.3
                     context.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -517,18 +603,23 @@ public extension View {
                     scrollView.reflectScrolledClipView(clip)
                 } completionHandler: { [weak self] in
                     Task { @MainActor in
-                        guard let self else { return }
+                        guard let self, self.connectionGeneration == generation else { return }
+
                         self.isClosingGap = false
                         guard let scrollView = self.scrollView else { return }
+
                         // A fresh pull may have re-opened the gap while this animation ran,
                         // in which case the enlarged inset it just installed is the current
                         // truth and must be left alone.
                         guard !self.gapOpen else { return }
+
                         // The content has arrived at the resting top; removing the gap
                         // inset now doesn't shift it further (position tracks the origin,
                         // not the inset), so the hand-off is seamless.
                         scrollView.contentInsets.top = baseline
-                        scrollView.automaticallyAdjustsContentInsets = true
+                        if let original = self.originalAutoInsets {
+                            scrollView.automaticallyAdjustsContentInsets = original
+                        }
                     }
                 }
             }
@@ -564,7 +655,8 @@ public extension View {
                 return best
             }
 
-            deinit { NotificationCenter.default.removeObserver(self) }
+            isolated deinit { disconnect() }
         }
     }
+    // swiftlint:enable type_body_length
 #endif
