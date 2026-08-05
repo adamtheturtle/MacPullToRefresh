@@ -78,13 +78,26 @@ public extension View {
     /// Centres the ``PullIndicator`` within its bounds so it can be dropped straight
     /// into the scroll view's clip view as a plain AppKit subview (via `NSHostingView`)
     /// that scrolls with the content.
-    private struct HostedIndicator: View {
+    struct HostedIndicator: View {
         var pull: CGFloat
         var isRefreshing: Bool
 
         var body: some View {
             PullIndicator(pull: pull, isRefreshing: isRefreshing)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Refresh")
+                .accessibilityValue(Self.accessibilityStatus(
+                    pull: pull,
+                    isRefreshing: isRefreshing
+                ))
+                .accessibilityHidden(pull <= 0 && !isRefreshing)
+        }
+
+        static func accessibilityStatus(pull: CGFloat, isRefreshing: Bool) -> String {
+            if isRefreshing { return "Refreshing" }
+            if pull >= 1 { return "Ready" }
+            return "Pulling"
         }
     }
 
@@ -92,10 +105,12 @@ public extension View {
     /// one by one as the user drags and spin while the refresh runs, mirroring
     /// `UIRefreshControl`'s activity indicator. Extracted from the modifier so it can
     /// be driven directly from fixed `pull`/`isRefreshing` values (and previewed).
-    private struct PullIndicator: View {
+    struct PullIndicator: View {
         /// 0…1 as the user drags past the top; reveals the spokes in turn.
         var pull: CGFloat
         var isRefreshing: Bool
+
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
         /// The indicator's side length, scaled with the user's preferred text size
         /// (tracking Caption 2) so it honors the accessibility setting.
@@ -110,9 +125,21 @@ public extension View {
         /// waiting a beat for the refresh to start.
         private var spinning: Bool { isRefreshing || pull >= 1 }
 
+        static func continuouslyRotates(
+            pull: CGFloat,
+            isRefreshing: Bool,
+            reduceMotion: Bool
+        ) -> Bool {
+            (isRefreshing || pull >= 1) && !reduceMotion
+        }
+
         var body: some View {
             Group {
-                if spinning {
+                if Self.continuouslyRotates(
+                    pull: pull,
+                    isRefreshing: isRefreshing,
+                    reduceMotion: reduceMotion
+                ) {
                     // Drive the rotation off a steady timeline clock rather than a
                     // `repeatForever` animation. Hosted in an `NSView` and carried along
                     // by the scroll, that animation visibly stutters and changes pace
@@ -123,13 +150,17 @@ public extension View {
                             .rotationEffect(.degrees(angle(at: context.date)))
                     }
                 } else {
-                    SpokeWheel(reveal: pull, spinning: false, side: side)
+                    SpokeWheel(
+                        reveal: spinning ? 1 : pull,
+                        spinning: spinning,
+                        side: side
+                    )
                 }
             }
             // Fade and grow in with the pull, matching iOS; solid while refreshing.
             .opacity(isRefreshing ? 1 : Double(min(1, pull * 1.2)))
             .scaleEffect(isRefreshing ? 1 : max(0.7, min(1, pull)))
-            .animation(.easeOut(duration: 0.2), value: isRefreshing)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: isRefreshing)
             .allowsHitTesting(false)
         }
 
@@ -373,6 +404,7 @@ public extension View {
                 positionIndicator()
                 guard value != currentRefreshing else { return }
                 currentRefreshing = value
+                announce(value ? "Refreshing" : "Refresh complete")
                 // The refresh flag has landed, so the pull it was handed off from has
                 // done its job. Clear it in the same render as the flag change: while
                 // `isRefreshing` is true the indicator is solid and spinning regardless of
@@ -381,6 +413,18 @@ public extension View {
                 awaitingRefreshHandoff = false
                 currentPull = 0
                 indicator.rootView = HostedIndicator(pull: 0, isRefreshing: value)
+            }
+
+            private func announce(_ message: String) {
+                guard let scrollView else { return }
+                NSAccessibility.post(
+                    element: scrollView,
+                    notification: .announcementRequested,
+                    userInfo: [
+                        .announcement: message,
+                        .priority: NSAccessibilityPriorityLevel.high.rawValue
+                    ]
+                )
             }
 
             @objc private func liveScrollStarted() {
