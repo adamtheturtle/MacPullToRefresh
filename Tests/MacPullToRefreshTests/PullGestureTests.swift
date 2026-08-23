@@ -142,6 +142,32 @@
         }
 
         @Test
+        func `boundsChanged updates stay within a reasonable budget`() {
+            let harness = PullHarness()
+            var triggered = 0
+            harness.coordinator.onTrigger = {}
+
+            harness.beginPull()
+            let start = ContinuousClock.now
+            for step in 0 ..< 500 {
+                harness.drag(past: CGFloat(step % 60))
+            }
+            let elapsed = start.duration(to: ContinuousClock.now)
+            #expect(elapsed < .seconds(0.75))
+            _ = triggered
+        }
+
+        @Test
+        func `disconnect drops the single hosted indicator subview`() {
+            let harness = PullHarness()
+            let afterConnect = harness.scrollView.contentView.subviews.count
+            #expect(afterConnect >= 1)
+
+            harness.coordinator.disconnect()
+            #expect(harness.scrollView.contentView.subviews.count == afterConnect - 1)
+        }
+
+        @Test
         func `refresh indicator exposes meaningful accessibility states`() {
             #expect(HostedIndicator.accessibilityStatus(pull: 0.5, isRefreshing: false) ==
                 "Pulling, 50 percent")
