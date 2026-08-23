@@ -501,6 +501,8 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
             private var originalAutoInsets: Bool?
             private var originalVerticalScrollElasticity: NSScrollView.Elasticity?
             private var originalPostsBoundsChangedNotifications: Bool?
+            /// Document height before ``ensureScrollableRubberBand`` bumped it; restored on disconnect.
+            private var originalDocumentHeight: CGFloat?
             /// Invalidates animation completions and delayed connection attempts after a
             /// disconnect or reconnection.
             private var connectionGeneration = 0
@@ -643,6 +645,9 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                         scrollView.contentView.postsBoundsChangedNotifications =
                             originalPostsBoundsChangedNotifications
                     }
+                    if let originalDocumentHeight, let document = scrollView.documentView {
+                        document.frame.size.height = originalDocumentHeight
+                    }
                 }
 
                 scrollView = nil
@@ -650,6 +655,7 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                 originalAutoInsets = nil
                 originalVerticalScrollElasticity = nil
                 originalPostsBoundsChangedNotifications = nil
+                originalDocumentHeight = nil
                 overscroll = 0
                 peakOverscroll = 0
                 gapOpen = false
@@ -840,6 +846,9 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
 
                 let visibleHeight = scrollView.contentView.bounds.height
                 if document.frame.height <= visibleHeight {
+                    if originalDocumentHeight == nil {
+                        originalDocumentHeight = document.frame.height
+                    }
                     document.frame.size.height = visibleHeight + 1
                 }
             }

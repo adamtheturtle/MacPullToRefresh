@@ -142,6 +142,25 @@
         }
 
         @Test
+        func `disconnect restores a short document height bump`() {
+            let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 300, height: 400))
+            scrollView.contentView = UnconstrainedClipView(frame: scrollView.bounds)
+            let document = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 80))
+            scrollView.documentView = document
+            let finder = NSView(frame: .zero)
+            document.addSubview(finder)
+
+            let coordinator = PullToRefreshScrollBridge.Coordinator()
+            coordinator.threshold = 44
+            coordinator.refreshGap = 44
+            coordinator.connect(from: finder)
+            #expect(document.frame.height == 401)
+
+            coordinator.disconnect()
+            #expect(document.frame.height == 80)
+        }
+
+        @Test
         func `boundsChanged updates stay within a reasonable budget`() {
             let harness = PullHarness()
             var triggered = 0
