@@ -36,14 +36,30 @@ public extension View {
     ///   - isEnabled: When `false`, the modifier is a no-op and no pull gesture or native
     ///     refresh control is installed.
     ///   - action: Async work to run when a refresh is triggered. Throwing actions are
-    ///     supported; errors are caught so the in-flight refresh always completes (the gap
-    ///     closes and the spinner clears). Call sites that need to surface a failure should
-    ///     handle it inside `action`.
+    ///     supported; errors are caught so the in-flight refresh always completes.
     @ViewBuilder
     func macPullToRefresh(
         threshold: CGFloat = 44,
         refreshGap: CGFloat = 44,
         isEnabled: Bool = true,
+        _ action: @escaping () async throws -> Void
+    ) -> some View {
+        macPullToRefresh(
+            threshold: threshold,
+            refreshGap: refreshGap,
+            isEnabled: isEnabled,
+            indicator: HostedIndicator.init,
+            action
+        )
+    }
+
+    /// Adds pull-to-refresh with a custom indicator view on macOS.
+    @ViewBuilder
+    func macPullToRefresh<I: View>(
+        threshold: CGFloat = 44,
+        refreshGap: CGFloat = 44,
+        isEnabled: Bool = true,
+        indicator: @escaping (_ pull: CGFloat, _ isRefreshing: Bool) -> I,
         _ action: @escaping () async throws -> Void
     ) -> some View {
         if isEnabled {
@@ -54,7 +70,8 @@ public extension View {
                     action: action,
                     trigger: nil as UInt64?,
                     threshold: safeThreshold,
-                    refreshGap: safeGap
+                    refreshGap: safeGap,
+                    indicator: indicator
                 ))
             #else
                 refreshable {
@@ -85,8 +102,13 @@ public extension View {
         _ action: @escaping () async throws -> Void
     ) -> some View {
         #if os(macOS)
-            return modifier(MacPullToRefresh(action: action, trigger: Optional(trigger),
-                                              threshold: 44, refreshGap: 44))
+            return modifier(MacPullToRefresh(
+                action: action,
+                trigger: Optional(trigger),
+                threshold: 44,
+                refreshGap: 44,
+                indicator: HostedIndicator.init
+            ))
         #else
             return refreshable {
                 do {
@@ -115,11 +137,12 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
 
 #if os(macOS)
 
-    private struct MacPullToRefresh<Trigger: Equatable>: ViewModifier {
+    private struct MacPullToRefresh<Trigger: Equatable, I: View>: ViewModifier {
         let action: () async throws -> Void
         let trigger: Trigger?
         let threshold: CGFloat
         let refreshGap: CGFloat
+        let indicator: (CGFloat, Bool) -> I
 
         @State private var isRefreshing = false
         @State private var didAppear = false
@@ -128,13 +151,12 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
         func body(content: Content) -> some View {
             content
                 .background(
-                    // The bridge holds the gap open with the scroll view's own top
-                    // content inset while refreshing, and hosts the indicator inside the
-                    // scroll view's clip view so it rides with the content lag-free — the
-                    // rows can never scroll over it, matching iOS.
-                    PullToRefreshScrollBridge(threshold: threshold,
-                                              refreshGap: refreshGap,
-                                              isRefreshing: isRefreshing) {
+                    PullToRefreshScrollBridge(
+                        threshold: threshold,
+                        refreshGap: refreshGap,
+                        isRefreshing: isRefreshing,
+                        indicator: indicator
+                    ) {
                         startRefresh()
                     }
                 )
@@ -365,11 +387,32 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
         let threshold: CGFloat
         let refreshGap: CGFloat
         let isRefreshing: Bool
+        let makeIndicator: (CGFloat, Bool) -> AnyView
         let onTrigger: () -> Void
+
+        init<I: View>(
+            threshold: CGFloat,
+            refreshGap: CGFloat,
+            isRefreshing: Bool,
+            indicator: @escaping (CGFloat, Bool) -> I,
+            onTrigger: @escaping () -> Void
+        ) {
+            self.threshold = threshold
+            self.refreshGap = refreshGap
+            self.isRefreshing = isRefreshing
+            self.makeIndicator = { pull, refreshing in
+                AnyView(
+                    indicator(pull, refreshing)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                )
+            }
+            self.onTrigger = onTrigger
+        }
 
         func makeNSView(context: Context) -> ScrollFinderView {
             let view = ScrollFinderView()
             let coordinator = context.coordinator
+            coordinator.configureIndicator(makeIndicator: makeIndicator)
             // The enclosing scroll view doesn't exist yet at make time, so connect
             // once this helper view is committed into the window hierarchy.
             view.onMoveToWindow = { [weak coordinator, weak view] in
@@ -391,6 +434,7 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
             coordinator.threshold = threshold
             coordinator.refreshGap = refreshGap
             coordinator.onTrigger = onTrigger
+            coordinator.configureIndicator(makeIndicator: makeIndicator)
             // Retry in case the scroll view wasn't reachable at first window attach.
             coordinator.connect(from: nsView)
             // The gap is opened mid-pull by the coordinator; close it once the refresh
@@ -441,6 +485,10 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
             private let indicatorHost = PullIndicatorHost()
             var currentPull: CGFloat { indicatorHost.pull }
             var currentRefreshing: Bool { indicatorHost.isRefreshing }
+
+            func configureIndicator(makeIndicator: @escaping (CGFloat, Bool) -> AnyView) {
+                indicatorHost.configure(makeIndicator)
+            }
 
             private weak var scrollView: NSScrollView?
             private var originalContentInsets: NSEdgeInsets?

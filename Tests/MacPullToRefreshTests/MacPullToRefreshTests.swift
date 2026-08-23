@@ -16,6 +16,18 @@ import Testing
 @Suite("macPullToRefresh modifier")
 struct MacPullToRefreshTests {
     @Test
+    func `a custom indicator builder compiles`() {
+        let view = List { Text("row") }
+            .macPullToRefresh(
+                indicator: { pull, refreshing in
+                    Text(refreshing ? "busy" : "\(Int(pull * 100))")
+                },
+                { }
+            )
+        #expect(view is (any View))
+    }
+
+    @Test
     func `the modifier accepts a programmatic trigger`() {
         let view = List { Text("row") }
             .macPullToRefresh(trigger: 0 as UInt64) { }
@@ -74,7 +86,7 @@ struct MacPullToRefreshTests {
 }
 
 /// A tiny actor so the test can assert the refresh closure was never called during view
-/// construction without tripping Swift 6 data-race checking.
+/// construction.
 private actor Ran {
     private(set) var value = false
     func mark() { value = true }
