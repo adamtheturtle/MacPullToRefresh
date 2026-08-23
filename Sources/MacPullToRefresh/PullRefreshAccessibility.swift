@@ -50,5 +50,10 @@
             )
             return String(format: format, locale: .current, Int64(percent))
         }
+        public static let refreshAlreadyInProgress = String(
+            localized: "Refresh already in progress",
+            defaultValue: "Refresh already in progress",
+            comment: "VoiceOver announcement when a pull completes while a refresh is running"
+        )
     }
 #endif

@@ -755,11 +755,6 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
 
                 ensureScrollableRubberBand(in: scrollView)
 
-                // The hosted indicator is a clip-view subview, so AppKit already carries
-                // it along with this scroll — nothing to reposition here. While a refresh
-                // runs the pull is over, so there's no reveal to update either.
-                if wasRefreshing { return }
-
                 // Ignore bounds changes that aren't part of a user scroll (launch, list
                 // reloads, programmatic layout) so the indicator only reveals on a pull.
                 let mouseDown = NSEvent.pressedMouseButtons & (1 << 0) != 0
@@ -773,6 +768,12 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                 // resting inset so a pull is measured from the true content top.
                 overscroll = max(0, -scrollView.contentView.bounds.origin.y - baselineTopInset)
                 peakOverscroll = max(peakOverscroll, overscroll)
+
+                // While a refresh runs, keep measuring over-scroll so a second pull can
+                // announce "already in progress" on release — but do not update the
+                // indicator reveal or re-open the gap.
+                if wasRefreshing { return }
+
                 // Reserve the gap the instant the pull crosses the threshold — while the
                 // finger is still down — so that when it lifts, the scroll view's own
                 // elastic settle lands on the enlarged inset (the held gap) instead of
@@ -846,7 +847,7 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                     // the action (SwiftUI guards that), but announce so VoiceOver is not
                     // silent when the gesture completes with no visible change.
                     if currentRefreshing || wasRefreshing {
-                        announce("Refresh already in progress")
+                        announce(PullRefreshAccessibility.refreshAlreadyInProgress)
                         setPull(0)
                         return
                     }
