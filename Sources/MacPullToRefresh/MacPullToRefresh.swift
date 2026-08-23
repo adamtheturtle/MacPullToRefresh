@@ -163,11 +163,19 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
     /// Centres the ``PullIndicator`` within its bounds so it can be dropped straight
     /// into the scroll view's clip view as a plain AppKit subview (via `NSHostingView`)
     /// that scrolls with the content.
-    struct HostedIndicator: View {
-        var pull: CGFloat
-        var isRefreshing: Bool
+    ///
+    /// Public so tests and host apps can assert VoiceOver status strings without depending
+    /// on private layout details of the spoke wheel.
+    public struct HostedIndicator: View {
+        public var pull: CGFloat
+        public var isRefreshing: Bool
 
-        var body: some View {
+        public init(pull: CGFloat, isRefreshing: Bool) {
+            self.pull = pull
+            self.isRefreshing = isRefreshing
+        }
+
+        public var body: some View {
             PullIndicator(pull: pull, isRefreshing: isRefreshing)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityElement(children: .ignore)
@@ -180,7 +188,11 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                 .accessibilityHidden(pull <= 0 && !isRefreshing)
         }
 
-        static func accessibilityStatus(pull: CGFloat, isRefreshing: Bool) -> String {
+        /// VoiceOver value for the current pull / refresh phase.
+        ///
+        /// Exposed as a testing API so clients can lock accessibility copy without hosting
+        /// a live `NSScrollView`.
+        public static func accessibilityStatus(pull: CGFloat, isRefreshing: Bool) -> String {
             if isRefreshing { return "Refreshing" }
             if pull >= 1 { return "Ready" }
             if pull <= 0 { return "Pulling" }

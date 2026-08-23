@@ -57,3 +57,8 @@ modifier already resumes on the main actor when it clears the in-flight refresh 
 
 - ``PullIndicator``
 - ``PullIndicator/continuouslyRotates(pull:isRefreshing:reduceMotion:)``
+
+### Accessibility testing
+
+- ``HostedIndicator``
+- ``HostedIndicator/accessibilityStatus(pull:isRefreshing:)``
