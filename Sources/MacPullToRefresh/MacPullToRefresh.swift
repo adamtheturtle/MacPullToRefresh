@@ -711,7 +711,9 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                 // Ignore bounds changes that aren't part of a user scroll (launch, list
                 // reloads, programmatic layout) so the indicator only reveals on a pull.
                 let mouseDown = NSEvent.pressedMouseButtons & (1 << 0) != 0
-                if mouseDown, !isLiveScrolling { isMousePulling = true }
+                if mouseDown, !isLiveScrolling, !isMousePulling {
+                    beginMousePull()
+                }
                 guard isLiveScrolling || isMousePulling else { return }
 
                 // A `List` uses a flipped clip view, so the visible origin dips below
@@ -758,14 +760,19 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                 finishPullGesture(fromLiveScroll: false)
             }
 
-            /// Test hook for mouse pulls that never post live-scroll notifications.
-            func beginMousePullForTesting() {
+            /// Arms a mouse-driven pull: reset peak tracking and re-capture baseline.
+            private func beginMousePull() {
                 isMousePulling = true
                 overscroll = 0
                 peakOverscroll = 0
                 if !gapOpen, !isClosingGap, let scrollView {
                     baselineTopInset = scrollView.contentInsets.top
                 }
+            }
+
+            /// Test hook for mouse pulls that never post live-scroll notifications.
+            func beginMousePullForTesting() {
+                beginMousePull()
             }
 
             func mousePullEndedForTesting() {
