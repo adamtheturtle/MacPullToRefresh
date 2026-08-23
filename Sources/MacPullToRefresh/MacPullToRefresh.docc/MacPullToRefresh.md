@@ -11,7 +11,6 @@ same modifier forwards to SwiftUI's native `.refreshable`.
 Apply ``SwiftUICore/View/macPullToRefresh(_:)`` to a `List` or `ScrollView` and provide
 an async refresh action.
 
-<<<<<<< HEAD
 ## Platform support
 
 | Platform | Status | Notes |
@@ -29,7 +28,7 @@ lowering that floor should track SwiftUI refresh-control availability, not the m
 When Reduce Motion is enabled, ``PullIndicator`` skips continuous wall-clock rotation and
 ease-out transitions. The spoke wheel still reveals with the pull and can show a static
 "armed" layout while refreshing, matching the expectation of a calm, non-spinning control.
-=======
+
 ## ScrollView vs List placement
 
 On macOS, attach the modifier to the scrollable container itself:
@@ -47,7 +46,6 @@ The package enables Swift 6 default `MainActor` isolation. Public entry points s
 ``SwiftUICore/View/macPullToRefresh(_:)`` and the macOS bridge types run on the main actor.
 Call refresh actions that touch UI or SwiftUI `@State` from that same isolation; the
 modifier already resumes on the main actor when it clears the in-flight refresh flag.
->>>>>>> 3413da6 (Document List/ScrollView placement and MainActor isolation.)
 
 ## Topics
 
