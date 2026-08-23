@@ -6,6 +6,7 @@ let buildDocumentation = ProcessInfo.processInfo.environment["MACPULL_BUILD_DOCS
 
 let package = Package(
     name: "MacPullToRefresh",
+    defaultLocalization: "en",
     platforms: [
         .macOS(.v13),
         .iOS(.v16)
