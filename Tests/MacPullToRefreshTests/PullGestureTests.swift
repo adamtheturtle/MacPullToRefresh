@@ -103,6 +103,19 @@
             #expect(triggered == 1)
         }
 
+
+        @Test
+        func `openGapForRefresh reserves the gap without a pull`() {
+            let harness = PullHarness(baselineTopInset: 8)
+            #expect(!harness.coordinator.gapOpen)
+
+            harness.coordinator.openGapForRefresh()
+
+            #expect(harness.coordinator.gapOpen)
+            #expect(harness.scrollView.contentInsets.top == 8 + harness.threshold)
+            #expect(harness.coordinator.baselineTopInset == 8)
+        }
+
         @Test
         func `closeGap begins closing while holding the gap inset`() {
             // Core Animation completions do not run in this headless harness (no window /
