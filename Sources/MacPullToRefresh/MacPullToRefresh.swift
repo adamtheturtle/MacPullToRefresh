@@ -134,7 +134,14 @@ public extension View {
         static func accessibilityStatus(pull: CGFloat, isRefreshing: Bool) -> String {
             if isRefreshing { return "Refreshing" }
             if pull >= 1 { return "Ready" }
-            return "Pulling"
+            if pull <= 0 { return "Pulling" }
+            let percent = Int((pull * 100).rounded(.down))
+            return "Pulling, \(percent) percent"
+        }
+
+        /// Pull progress toward the arming threshold, clamped to 0…1.
+        static func progressFraction(pull: CGFloat) -> CGFloat {
+            min(1, max(0, pull))
         }
     }
 

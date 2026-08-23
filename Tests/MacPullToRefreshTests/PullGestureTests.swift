@@ -105,9 +105,12 @@
 
         @Test
         func `refresh indicator exposes meaningful accessibility states`() {
-            #expect(HostedIndicator.accessibilityStatus(pull: 0.5, isRefreshing: false) == "Pulling")
+            #expect(HostedIndicator.accessibilityStatus(pull: 0.5, isRefreshing: false) ==
+                "Pulling, 50 percent")
             #expect(HostedIndicator.accessibilityStatus(pull: 1, isRefreshing: false) == "Ready")
             #expect(HostedIndicator.accessibilityStatus(pull: 0, isRefreshing: true) == "Refreshing")
+            #expect(HostedIndicator.progressFraction(pull: 0.5) == 0.5)
+            #expect(HostedIndicator.progressFraction(pull: 1.5) == 1)
         }
 
         @Test
