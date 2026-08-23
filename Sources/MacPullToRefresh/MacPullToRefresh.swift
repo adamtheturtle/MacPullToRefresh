@@ -212,8 +212,8 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
             PullIndicator(pull: pull, isRefreshing: isRefreshing)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Refresh")
-                .accessibilityHint("Pull down to refresh")
+                .accessibilityLabel(PullRefreshAccessibility.refreshLabel)
+                .accessibilityHint(PullRefreshAccessibility.refreshHint)
                 .accessibilityValue(Self.accessibilityStatus(
                     pull: pull,
                     isRefreshing: isRefreshing
@@ -226,11 +226,11 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
         /// Exposed as a testing API so clients can lock accessibility copy without hosting
         /// a live `NSScrollView`.
         public static func accessibilityStatus(pull: CGFloat, isRefreshing: Bool) -> String {
-            if isRefreshing { return "Refreshing" }
-            if pull >= 1 { return "Ready" }
-            if pull <= 0 { return "Pulling" }
+            if isRefreshing { return PullRefreshAccessibility.refreshing }
+            if pull >= 1 { return PullRefreshAccessibility.ready }
+            if pull <= 0 { return PullRefreshAccessibility.pulling }
             let percent = Int((pull * 100).rounded(.down))
-            return "Pulling, \(percent) percent"
+            return "\(PullRefreshAccessibility.pulling), \(percent) percent"
         }
 
         /// Pull progress toward the arming threshold, clamped to 0…1.
@@ -326,11 +326,17 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
         var side: CGFloat
         private let spokeCount = 12
 
+        @Environment(\.colorSchemeContrast) private var contrast
+
+        private var spokeColor: Color {
+            contrast == .increased ? .primary : .secondary
+        }
+
         var body: some View {
             ZStack {
                 ForEach(0 ..< spokeCount, id: \.self) { index in
                     Capsule()
-                        .fill(Color.secondary)
+                        .fill(spokeColor)
                         .frame(width: side * 0.11, height: side * 0.28)
                         .offset(y: -side * 0.34)
                         .rotationEffect(.degrees(Double(index) / Double(spokeCount) * 360))
@@ -664,7 +670,7 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                 if let scrollView {
                     indicatorHost.reposition(in: scrollView, refreshGap: refreshGap)
                 }
-                announce(value ? "Refreshing" : "Refresh complete")
+                announce(value ? PullRefreshAccessibility.refreshing : PullRefreshAccessibility.refreshComplete)
                 awaitingRefreshHandoff = false
                 indicatorHost.setRefreshing(value)
             }
