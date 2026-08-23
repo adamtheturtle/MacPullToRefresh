@@ -427,9 +427,9 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
             /// The indicator, hosted as a subview of the scroll view's clip view so it
             /// scrolls with the content. Driven directly (no SwiftUI state round-trip),
             /// so it never lags behind the rows.
-            private var indicator: NSHostingView<HostedIndicator>?
-            private(set) var currentPull: CGFloat = 0
-            private(set) var currentRefreshing = false
+            private let indicatorHost = PullIndicatorHost()
+            var currentPull: CGFloat { indicatorHost.pull }
+            var currentRefreshing: Bool { indicatorHost.isRefreshing }
 
             private weak var scrollView: NSScrollView?
             private var originalContentInsets: NSEdgeInsets?
@@ -507,7 +507,7 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                 }
                 guard candidate !== scrollView else { return }
 
-                if scrollView != nil || indicator != nil {
+                if scrollView != nil {
                     disconnect()
                 }
 
@@ -544,6 +544,10 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                 }
             }
 
+            private func attachIndicator(to scrollView: NSScrollView) {
+                indicatorHost.attach(to: scrollView, refreshGap: refreshGap)
+            }
+
             /// Stops observing the current host and restores every AppKit property the
             /// bridge changed. This is synchronous so removal during a refresh or closing
             /// animation cannot leave a surviving scroll view in a modified state.
@@ -557,8 +561,7 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                     NSEvent.removeMonitor(mouseUpMonitor)
                     self.mouseUpMonitor = nil
                 }
-                indicator?.removeFromSuperview()
-                indicator = nil
+                indicatorHost.removeFromSuperview()
 
                 if let scrollView {
                     if let originalAutoInsets {
@@ -581,8 +584,6 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                 originalAutoInsets = nil
                 originalVerticalScrollElasticity = nil
                 originalPostsBoundsChangedNotifications = nil
-                currentPull = 0
-                currentRefreshing = false
                 overscroll = 0
                 peakOverscroll = 0
                 gapOpen = false
@@ -593,62 +594,19 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                 isMousePulling = false
             }
 
-            /// Drops the hosted indicator into the clip view, occupying the gap band
-            /// directly above the content's top edge. As a clip-view subview it is
-            /// carried along by every scroll — including momentum — in the same pass as
-            /// the rows, so it stays glued just above the first row with no lag and clips
-            /// away at the top edge as it rides off.
-            private func attachIndicator(to scrollView: NSScrollView) {
-                guard indicator == nil else { return }
-
-                let host = NSHostingView(rootView: HostedIndicator(
-                    pull: currentPull,
-                    isRefreshing: currentRefreshing
-                ))
-                host.autoresizingMask = [.width]
-                indicator = host
-                let clip = scrollView.contentView
-                clip.addSubview(host)
-                positionIndicator()
-            }
-
-            /// Sizes the indicator to the gap band `[-refreshGap, 0]` in the clip view's
-            /// (flipped) coordinates — i.e. `refreshGap` points immediately above the
-            /// content's top edge (`y == 0`). It's off-screen above the top at rest and
-            /// slides into view as the content rubber-bands or the gap opens.
-            private func positionIndicator() {
-                guard let indicator, let clip = scrollView?.contentView else { return }
-
-                indicator.frame = NSRect(x: 0, y: -refreshGap,
-                                         width: clip.bounds.width, height: refreshGap)
-            }
-
             private func setPull(_ value: CGFloat) {
-                currentPull = value
-                indicator?.rootView = HostedIndicator(pull: value, isRefreshing: currentRefreshing)
+                indicatorHost.setPull(value)
             }
 
             func setRefreshing(_ value: Bool) {
-                guard let indicator else { currentRefreshing = value; return }
+                guard value != indicatorHost.isRefreshing else { return }
 
-                // Keep the indicator on top and correctly placed in case the List rebuilt
-                // its clip-view contents between updates.
-                if indicator.superview !== scrollView?.contentView, let clip = scrollView?.contentView {
-                    clip.addSubview(indicator)
+                if let scrollView {
+                    indicatorHost.reposition(in: scrollView, refreshGap: refreshGap)
                 }
-                positionIndicator()
-                guard value != currentRefreshing else { return }
-
-                currentRefreshing = value
                 announce(value ? "Refreshing" : "Refresh complete")
-                // The refresh flag has landed, so the pull it was handed off from has
-                // done its job. Clear it in the same render as the flag change: while
-                // `isRefreshing` is true the indicator is solid and spinning regardless of
-                // the pull, and on the way back down a stale pull of 1 would otherwise
-                // keep the wheel spinning after the refresh ended.
                 awaitingRefreshHandoff = false
-                currentPull = 0
-                indicator.rootView = HostedIndicator(pull: 0, isRefreshing: value)
+                indicatorHost.setRefreshing(value)
             }
 
             private func announce(_ message: String) {
