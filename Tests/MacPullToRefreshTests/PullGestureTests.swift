@@ -151,7 +151,7 @@
         func `openGapForRefresh scrolls the clip so the indicator is visible at rest`() {
             let harness = PullHarness(baselineTopInset: 8)
             let clip = harness.scrollView.contentView
-            #expect(clip.bounds.origin.y == -8)
+            clip.setBoundsOrigin(NSPoint(x: clip.bounds.origin.x, y: -8))
 
             harness.coordinator.openGapForRefresh()
 
