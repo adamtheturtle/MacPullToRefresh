@@ -29,17 +29,42 @@ public extension View {
     /// simply wires `action` to `.refreshable` - call sites can apply it unconditionally.
     func macPullToRefresh(_ action: @escaping () async -> Void) -> some View {
         #if os(macOS)
-            return modifier(MacPullToRefresh(action: action))
+            return modifier(MacPullToRefresh(action: action, trigger: nil as UInt64?))
         #else
             return refreshable { await action() }
+        #endif
+    }
+
+    /// Adds pull-to-refresh and also runs `action` whenever `trigger` changes to a new
+    /// value (after the initial appearance). Use this for a toolbar button or other
+    /// programmatic refresh:
+    ///
+    /// ```swift
+    /// @State private var refreshTick: UInt64 = 0
+    /// …
+    /// .macPullToRefresh(trigger: refreshTick) { await load() }
+    /// Button("Refresh") { refreshTick &+= 1 }
+    /// ```
+    func macPullToRefresh<Trigger: Equatable>(
+        trigger: Trigger,
+        _ action: @escaping () async -> Void
+    ) -> some View {
+        #if os(macOS)
+            return modifier(MacPullToRefresh(action: action, trigger: Optional(trigger)))
+        #else
+            return refreshable { await action() }
+                .onChange(of: trigger) { _ in
+                    Task { await action() }
+                }
         #endif
     }
 }
 
 #if os(macOS)
 
-    private struct MacPullToRefresh: ViewModifier {
+    private struct MacPullToRefresh<Trigger: Equatable>: ViewModifier {
         let action: () async -> Void
+        let trigger: Trigger?
 
         /// How far (in points) the content must be dragged past the top before
         /// releasing triggers a refresh.
@@ -52,6 +77,7 @@ public extension View {
         private let refreshGap: CGFloat = 44
 
         @State private var isRefreshing = false
+        @State private var didAppear = false
 
         func body(content: Content) -> some View {
             content
@@ -63,15 +89,25 @@ public extension View {
                     PullToRefreshScrollBridge(threshold: threshold,
                                               refreshGap: refreshGap,
                                               isRefreshing: isRefreshing) {
-                        guard !isRefreshing else { return }
-
-                        isRefreshing = true
-                        Task {
-                            await action()
-                            isRefreshing = false
-                        }
+                        startRefresh()
                     }
                 )
+                .onAppear { didAppear = true }
+                // macOS 13-compatible onChange (single-parameter form).
+                .onChange(of: trigger) { newValue in
+                    guard didAppear, newValue != nil else { return }
+                    startRefresh()
+                }
+        }
+
+        private func startRefresh() {
+            guard !isRefreshing else { return }
+
+            isRefreshing = true
+            Task {
+                await action()
+                isRefreshing = false
+            }
         }
     }
 
