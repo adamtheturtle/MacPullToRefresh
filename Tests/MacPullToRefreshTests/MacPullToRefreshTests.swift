@@ -84,6 +84,13 @@ struct MacPullToRefreshTests {
     }
 
     @Test
+    func `a disabled trigger overload keeps a stable modifier type`() {
+        let view = List { Text("row") }
+            .macPullToRefresh(trigger: 0 as UInt64, isEnabled: false) { }
+        #expect(view is (any View))
+    }
+
+    @Test
     func `a throwing action is accepted by the modifier`() {
         enum Sample: Error { case boom }
         let view = List { Text("row") }
