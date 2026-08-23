@@ -3,6 +3,9 @@
 Native-feeling pull-to-refresh for macOS SwiftUI, backed by `NSScrollView` over-scroll and
 forwarded to `.refreshable` on iOS.
 
+[![Swift versions](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fadamtheturtle%2FMacPullToRefresh%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/adamtheturtle/MacPullToRefresh)
+[![Platforms](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fadamtheturtle%2FMacPullToRefresh%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/adamtheturtle/MacPullToRefresh)
+
 [Documentation](https://swiftpackageindex.com/adamtheturtle/MacPullToRefresh/documentation/macpulltorefresh) |
 [Swift Package Index](https://swiftpackageindex.com/adamtheturtle/MacPullToRefresh)
 
@@ -32,6 +35,12 @@ Add the `MacPullToRefresh` product to your target dependencies.
 - Swift 6.2+
 - macOS 13+ or iOS 16+
 - visionOS is not a supported platform (see DocC platform support)
+
+## Package.resolved policy
+
+This repository is a library package. `Package.resolved` is gitignored on purpose so consumers
+resolve dependency versions against their own app or workspace lockfile. Do not commit a
+resolved file here; CI and local builds resolve fresh from `Package.swift`.
 
 ## License
 
