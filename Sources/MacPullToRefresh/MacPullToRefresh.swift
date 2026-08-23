@@ -954,9 +954,13 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                 guard let document = scrollView.documentView else { return }
 
                 let visibleHeight = scrollView.contentView.bounds.height
-                // A document that is taller than our +1 bump is naturally scrollable (or was
-                // replaced). Drop bump bookkeeping so we do not shrink it on the next pass.
+                // A document taller than our +1 bump is naturally scrollable — unless the
+                // clip shrank and we are still carrying the prior bump height.
                 if document.frame.height > visibleHeight + 1 {
+                    if let original = originalDocumentHeight, original <= visibleHeight {
+                        document.frame.size.height = visibleHeight + 1
+                        return
+                    }
                     originalDocumentHeight = nil
                     return
                 }
