@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "[0-9]+.[0-9]+.[0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+-*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Create release from tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          notes="Release ${tag}."
+          if [ -f CHANGELOG.md ]; then
+            notes=$(awk -v tag="${tag#v}" '
+              BEGIN { grab=0 }
+              $0 ~ "^## [[:space:]]*\\[" tag "\\]" { grab=1; next }
+              grab && $0 ~ /^## / { exit }
+              grab { print }
+            ' CHANGELOG.md)
+            if [ -z "${notes}" ]; then
+              notes="Release ${tag}."
+            fi
+          fi
+          gh release create "${tag}" \
+            --title "${tag}" \
+            --notes "${notes}" \
+            --verify-tag
