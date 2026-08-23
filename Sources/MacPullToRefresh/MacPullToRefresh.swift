@@ -27,9 +27,27 @@ public extension View {
     ///
     /// On iOS the underlying `List`/`ScrollView` has a native pull-to-refresh, so this
     /// simply wires `action` to `.refreshable` - call sites can apply it unconditionally.
-    func macPullToRefresh(_ action: @escaping () async -> Void) -> some View {
+    ///
+    /// - Parameters:
+    ///   - threshold: Points past the top required to arm a refresh on macOS. Values that
+    ///     are not finite or are `<= 0` fall back to `44`. Ignored on iOS.
+    ///   - refreshGap: Top inset held open while a refresh runs on macOS. Values that are
+    ///     not finite or are `<= 0` fall back to the sanitized `threshold`. Ignored on iOS.
+    ///   - action: Async work to run when a refresh is triggered.
+    func macPullToRefresh(
+        threshold: CGFloat = 44,
+        refreshGap: CGFloat = 44,
+        _ action: @escaping () async -> Void
+    ) -> some View {
         #if os(macOS)
-            return modifier(MacPullToRefresh(action: action, trigger: nil as UInt64?))
+            let safeThreshold = sanitizedPullDistance(threshold, fallback: 44)
+            let safeGap = sanitizedPullDistance(refreshGap, fallback: safeThreshold)
+            return modifier(MacPullToRefresh(
+                action: action,
+                trigger: nil as UInt64?,
+                threshold: safeThreshold,
+                refreshGap: safeGap
+            ))
         #else
             return refreshable { await action() }
         #endif
@@ -50,7 +68,8 @@ public extension View {
         _ action: @escaping () async -> Void
     ) -> some View {
         #if os(macOS)
-            return modifier(MacPullToRefresh(action: action, trigger: Optional(trigger)))
+            return modifier(MacPullToRefresh(action: action, trigger: Optional(trigger),
+                                              threshold: 44, refreshGap: 44))
         #else
             return refreshable { await action() }
                 .onChange(of: trigger) { _ in
@@ -60,21 +79,18 @@ public extension View {
     }
 }
 
+/// Ensures pull distances used for arming and gap sizing stay positive and finite.
+func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
+    value.isFinite && value > 0 ? value : fallback
+}
+
 #if os(macOS)
 
     private struct MacPullToRefresh<Trigger: Equatable>: ViewModifier {
         let action: () async -> Void
         let trigger: Trigger?
-
-        /// How far (in points) the content must be dragged past the top before
-        /// releasing triggers a refresh.
-        private let threshold: CGFloat = 44
-
-        /// The gap held open at the top while a refresh runs, so the spinner sits in
-        /// cleared space above the content rather than on top of it, as on iOS. Kept
-        /// equal to `threshold` so the content is already about this far down when the
-        /// user releases, making the hand-off from the rubber-band nearly seamless.
-        private let refreshGap: CGFloat = 44
+        let threshold: CGFloat
+        let refreshGap: CGFloat
 
         @State private var isRefreshing = false
         @State private var didAppear = false

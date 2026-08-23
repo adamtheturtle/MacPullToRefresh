@@ -40,6 +40,22 @@ struct MacPullToRefreshTests {
             .macPullToRefresh { await ran.mark() }
         #expect(await ran.value == false)
     }
+
+    @Test
+    func `non-positive thresholds fall back to the default distance`() {
+        #expect(sanitizedPullDistance(0, fallback: 44) == 44)
+        #expect(sanitizedPullDistance(-12, fallback: 44) == 44)
+        #expect(sanitizedPullDistance(.nan, fallback: 44) == 44)
+        #expect(sanitizedPullDistance(.infinity, fallback: 44) == 44)
+        #expect(sanitizedPullDistance(60, fallback: 44) == 60)
+    }
+
+    @Test
+    func `custom threshold and gap compile on the modifier`() {
+        let view = List { Text("row") }
+            .macPullToRefresh(threshold: 60, refreshGap: 48) { }
+        #expect(view is (any View))
+    }
 }
 
 /// A tiny actor so the test can assert the refresh closure was never called during view

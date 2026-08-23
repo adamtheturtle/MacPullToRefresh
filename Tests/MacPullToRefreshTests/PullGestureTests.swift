@@ -162,6 +162,25 @@
         }
 
         @Test
+        func `a custom threshold arms only after that distance`() {
+            let harness = PullHarness()
+            harness.coordinator.threshold = 80
+            harness.coordinator.refreshGap = 80
+            var triggered = 0
+            harness.coordinator.onTrigger = { triggered += 1 }
+
+            harness.beginPull()
+            harness.drag(past: 60)
+            harness.release()
+            #expect(triggered == 0)
+
+            harness.beginPull()
+            harness.drag(past: 90)
+            harness.release()
+            #expect(triggered == 1)
+        }
+
+        @Test
         func `dragging back to the top before releasing cancels the refresh`() {
             // Issue #2: `gapOpen` latches at the threshold crossing and was never cleared
             // mid-drag, so a pull the user changed their mind about still fired on release.
