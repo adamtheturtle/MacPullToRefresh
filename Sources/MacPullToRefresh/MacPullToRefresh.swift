@@ -156,15 +156,15 @@ public extension View {
             .onAppear { didAppear = true }
             .onChange(of: trigger) { newValue in
                 guard isEnabled, didAppear, newValue != nil, !isRefreshing else { return }
-                Task {
-                    isRefreshing = true
-                    await runAction()
-                    isRefreshing = false
-                }
+                Task { await runAction() }
             }
         }
 
         private func runAction() async {
+            guard !isRefreshing else { return }
+
+            isRefreshing = true
+            defer { isRefreshing = false }
             do {
                 try await action()
             } catch {
