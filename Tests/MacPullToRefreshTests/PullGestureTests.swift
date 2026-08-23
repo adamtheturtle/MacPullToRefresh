@@ -115,7 +115,6 @@
             #expect(harness.coordinator.mouseArmingProbe(in: harness.scrollView) == 0)
         }
 
-
         @Test
         func `mouse up after a live-scroll trigger does not cancel the gap`() {
             let harness = PullHarness()

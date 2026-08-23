@@ -44,13 +44,21 @@ public extension View {
         isEnabled: Bool = true,
         _ action: @escaping () async throws -> Void
     ) -> some View {
-        macPullToRefresh(
-            threshold: threshold,
-            refreshGap: refreshGap,
-            isEnabled: isEnabled,
-            indicator: HostedIndicator.init,
-            action
-        )
+        #if os(macOS)
+            macPullToRefresh(
+                threshold: threshold,
+                refreshGap: refreshGap,
+                isEnabled: isEnabled,
+                indicator: HostedIndicator.init,
+                action
+            )
+        #else
+            modifier(IOSPullToRefresh(
+                isEnabled: isEnabled,
+                trigger: nil as UInt64?,
+                action: action
+            ))
+        #endif
     }
 
     /// Adds pull-to-refresh with a custom indicator view on macOS.
