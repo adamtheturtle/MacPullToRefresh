@@ -91,6 +91,19 @@
     @MainActor
     struct PullGestureTests {
         @Test
+        func `mouse pull release triggers a refresh without live scroll notifications`() {
+            let harness = PullHarness()
+            var triggered = 0
+            harness.coordinator.onTrigger = { triggered += 1 }
+
+            harness.coordinator.beginMousePullForTesting()
+            harness.drag(past: 60)
+            harness.coordinator.mousePullEndedForTesting()
+
+            #expect(triggered == 1)
+        }
+
+        @Test
         func `refresh indicator exposes meaningful accessibility states`() {
             #expect(HostedIndicator.accessibilityStatus(pull: 0.5, isRefreshing: false) == "Pulling")
             #expect(HostedIndicator.accessibilityStatus(pull: 1, isRefreshing: false) == "Ready")
