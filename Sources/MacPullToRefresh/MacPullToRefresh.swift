@@ -350,6 +350,10 @@ public extension View {
             /// negative as the list settles - gating the pull on a live scroll keeps the
             /// indicator from appearing on its own at launch.
             private var isLiveScrolling = false
+            /// True while the primary mouse button is down during a content drag that does
+            /// not emit live-scroll notifications (common with mouse pulls).
+            private var isMousePulling = false
+            private var mouseUpMonitor: Any?
 
             private var connectAttempts = 0
 
@@ -399,7 +403,17 @@ public extension View {
                                    name: NSScrollView.willStartLiveScrollNotification, object: candidate)
                 center.addObserver(self, selector: #selector(liveScrollEnded),
                                    name: NSScrollView.didEndLiveScrollNotification, object: candidate)
+                installMouseUpMonitor()
                 attachIndicator(to: candidate)
+            }
+
+            private func installMouseUpMonitor() {
+                guard mouseUpMonitor == nil else { return }
+
+                mouseUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak self] event in
+                    self?.mousePullEnded()
+                    return event
+                }
             }
 
             /// Stops observing the current host and restores every AppKit property the
@@ -411,6 +425,10 @@ public extension View {
                 // keeping the old notifications would deliver stale scroll events.
                 // swiftlint:disable:next notification_center_detachment
                 NotificationCenter.default.removeObserver(self)
+                if let mouseUpMonitor {
+                    NSEvent.removeMonitor(mouseUpMonitor)
+                    self.mouseUpMonitor = nil
+                }
                 indicator?.removeFromSuperview()
                 indicator = nil
 
@@ -444,6 +462,7 @@ public extension View {
                 awaitingRefreshHandoff = false
                 wasRefreshing = false
                 isLiveScrolling = false
+                isMousePulling = false
             }
 
             /// Drops the hosted indicator into the clip view, occupying the gap band
@@ -539,7 +558,9 @@ public extension View {
 
                 // Ignore bounds changes that aren't part of a user scroll (launch, list
                 // reloads, programmatic layout) so the indicator only reveals on a pull.
-                guard isLiveScrolling else { return }
+                let mouseDown = NSEvent.pressedMouseButtons & (1 << 0) != 0
+                if mouseDown, !isLiveScrolling { isMousePulling = true }
+                guard isLiveScrolling || isMousePulling else { return }
 
                 // A `List` uses a flipped clip view, so the visible origin dips below
                 // zero as the content rubber-bands past the top edge. Subtract the
@@ -573,27 +594,43 @@ public extension View {
             }
 
             @objc private func liveScrollEnded() {
-                isLiveScrolling = false
-                // Decide on the over-scroll as it actually stands at release rather than
-                // on `gapOpen`, which latches at the threshold crossing and never clears:
-                // a user who pulls past the threshold, changes their mind and drags back
-                // to the top before releasing has cancelled the gesture, as on iOS.
+                finishPullGesture(fromLiveScroll: true)
+            }
+
+            private func mousePullEnded() {
+                finishPullGesture(fromLiveScroll: false)
+            }
+
+            /// Test hook for mouse pulls that never post live-scroll notifications.
+            func beginMousePullForTesting() {
+                isMousePulling = true
+                overscroll = 0
+                peakOverscroll = 0
+                if !gapOpen, !isClosingGap, let scrollView {
+                    baselineTopInset = scrollView.contentInsets.top
+                }
+            }
+
+            func mousePullEndedForTesting() {
+                mousePullEnded()
+            }
+
+            private func finishPullGesture(fromLiveScroll: Bool) {
+                if fromLiveScroll {
+                    isLiveScrolling = false
+                } else {
+                    guard isMousePulling else { return }
+                    isMousePulling = false
+                }
                 let shouldTrigger = overscroll >= releaseArmingOverscroll
                 overscroll = 0
                 peakOverscroll = 0
                 if shouldTrigger {
-                    // Leave the pull at full reveal across the hand-off: `currentRefreshing`
-                    // only flips once `setRefreshing(true)` arrives via `updateNSView`, and
-                    // zeroing the pull before then renders the indicator at opacity 0 for
-                    // those frames, blinking it out exactly where it should come alive.
                     awaitingRefreshHandoff = true
                     onTrigger()
                     scheduleHandoffFallback()
                 } else {
                     setPull(0)
-                    // The gap was reserved mid-drag on the threshold crossing, so a
-                    // cancelled pull leaves it open with no refresh to fill it. Take it
-                    // back down the same way a finished refresh does.
                     closeGap()
                 }
             }
