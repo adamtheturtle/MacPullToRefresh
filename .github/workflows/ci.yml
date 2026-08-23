@@ -42,6 +42,9 @@ jobs:
       - name: Test
         run: swift test
 
+      - name: Demo executable smoke build
+        run: swift build --product Demo
+
   prose:
     name: Vale
     runs-on: ubuntu-latest
