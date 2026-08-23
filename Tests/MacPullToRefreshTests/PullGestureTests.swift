@@ -228,6 +228,35 @@
         }
 
         @Test
+        func `rubber-band bump bookkeeping survives a clip shrink while connected`() {
+            let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 300, height: 400))
+            scrollView.contentView = UnconstrainedClipView(frame: scrollView.bounds)
+            let document = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 80))
+            scrollView.documentView = document
+            let finder = NSView(frame: .zero)
+            document.addSubview(finder)
+
+            let coordinator = PullToRefreshScrollBridge.Coordinator()
+            coordinator.threshold = 44
+            coordinator.refreshGap = 44
+            coordinator.connect(from: finder)
+            #expect(document.frame.height == 401)
+
+            scrollView.setFrameSize(NSSize(width: 300, height: 500))
+            scrollView.contentView.setFrameSize(NSSize(width: 300, height: 500))
+            coordinator.connect(from: finder)
+            #expect(document.frame.height == 501)
+
+            scrollView.setFrameSize(NSSize(width: 300, height: 400))
+            scrollView.contentView.setFrameSize(NSSize(width: 300, height: 400))
+            coordinator.connect(from: finder)
+            #expect(document.frame.height == 401)
+
+            coordinator.disconnect()
+            #expect(document.frame.height == 80)
+        }
+
+        @Test
         func `boundsChanged updates stay within a reasonable budget`() {
             let harness = PullHarness()
             var triggered = 0
