@@ -35,6 +35,13 @@ struct MacPullToRefreshTests {
     }
 
     @Test
+    func `the trigger overload accepts custom threshold and gap`() {
+        let view = List { Text("row") }
+            .macPullToRefresh(trigger: 0 as UInt64, threshold: 60, refreshGap: 48) { }
+        #expect(view is (any View))
+    }
+
+    @Test
     func `the modifier can be applied to a scrollable container`() {
         // Compiles and returns a View unconditionally - the point of the cross-platform
         // API is that a call site applies it without an #if.
