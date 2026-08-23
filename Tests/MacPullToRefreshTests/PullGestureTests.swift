@@ -103,6 +103,18 @@
             #expect(triggered == 1)
         }
 
+        @Test
+        func `mouse arming ignores the gap rest position`() {
+            let harness = PullHarness()
+            harness.beginPull()
+            harness.drag(past: 60)
+            harness.release()
+            #expect(harness.coordinator.gapOpen)
+
+            harness.drag(past: harness.threshold)
+            #expect(harness.coordinator.mouseArmingProbe(in: harness.scrollView) == 0)
+        }
+
 
         @Test
         func `mouse up after a live-scroll trigger does not cancel the gap`() {
