@@ -90,6 +90,15 @@ struct MacPullToRefreshTests {
             .macPullToRefresh { throw Sample.boom }
         #expect(view is (any View))
     }
+
+    #if os(macOS)
+        @Test
+        func `accessibility strings resolve from the package bundle`() {
+            #expect(PullRefreshAccessibility.refreshLabel == "Refresh")
+            #expect(PullRefreshAccessibility.refreshHint == "Pull down to refresh")
+            #expect(PullRefreshAccessibility.refreshing == "Refreshing")
+        }
+    #endif
 }
 
 /// A tiny actor so the test can assert the refresh closure was never called during view
