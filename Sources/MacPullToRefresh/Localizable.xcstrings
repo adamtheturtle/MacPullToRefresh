@@ -1,0 +1,72 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Refresh" : {
+      "comment" : "VoiceOver label for the pull-to-refresh indicator",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh"
+          }
+        }
+      }
+    },
+    "Pull down to refresh" : {
+      "comment" : "VoiceOver hint describing the pull gesture",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pull down to refresh"
+          }
+        }
+      }
+    },
+    "Refreshing" : {
+      "comment" : "VoiceOver value while a refresh is running",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refreshing"
+          }
+        }
+      }
+    },
+    "Refresh complete" : {
+      "comment" : "VoiceOver announcement when a refresh finishes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh complete"
+          }
+        }
+      }
+    },
+    "Ready" : {
+      "comment" : "VoiceOver value when the pull has passed the arming threshold",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ready"
+          }
+        }
+      }
+    },
+    "Pulling" : {
+      "comment" : "VoiceOver value while the user is pulling but not yet armed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulling"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
