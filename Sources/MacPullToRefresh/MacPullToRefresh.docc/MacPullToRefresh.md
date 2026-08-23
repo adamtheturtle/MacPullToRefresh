@@ -20,7 +20,7 @@ an async refresh action.
 | Mac Catalyst | Supported via iOS path | Uses `.refreshable`; verify "Designed for iPad" vs scaled Mac idiom in your host app |
 | visionOS | Not supported | No platform declaration in `Package.swift`; do not depend on this product for visionOS targets |
 
-iOS 16 is the floor because SwiftUI's `.refreshable` is the iOS implementation. Raising or
+iOS 16 is the floor because SwiftUI's `.refreshable` is the iOS refresh path. Raising or
 lowering that floor should track SwiftUI refresh-control availability, not the macOS bridge.
 
 ## Reduce Motion
