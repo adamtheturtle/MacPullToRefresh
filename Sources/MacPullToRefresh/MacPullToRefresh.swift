@@ -255,6 +255,12 @@ public extension View {
 
                 coordinator.connect(from: view)
             }
+            view.onWindowChanged = { [weak coordinator, weak view] in
+                guard let coordinator, let view else { return }
+
+                coordinator.disconnect()
+                coordinator.connect(from: view)
+            }
             return view
         }
 
@@ -286,9 +292,18 @@ public extension View {
         /// the window, giving the coordinator a moment when sibling AppKit views exist.
         final class ScrollFinderView: NSView {
             var onMoveToWindow: (() -> Void)?
+            var onWindowChanged: (() -> Void)?
+            private weak var trackedWindow: NSWindow?
+
             override func viewDidMoveToWindow() {
                 super.viewDidMoveToWindow()
-                if window != nil { onMoveToWindow?() }
+                guard let window else { return }
+
+                if let trackedWindow, trackedWindow !== window {
+                    onWindowChanged?()
+                }
+                trackedWindow = window
+                onMoveToWindow?()
             }
         }
 
@@ -348,7 +363,7 @@ public extension View {
             private var connectAttempts = 0
 
             func connect(from view: NSView) {
-                guard let candidate = Self.scrollView(near: view) else {
+                guard let candidate = PullScrollViewLocator.scrollView(near: view) else {
                     if scrollView != nil {
                         disconnect()
                     }
@@ -666,37 +681,6 @@ public extension View {
                         }
                     }
                 }
-            }
-
-            /// Finds the scroll view this helper is layered over. A `ScrollView`'s
-            /// `.background` lands *inside* its scroll view, so the enclosing one is
-            /// correct. A `List` instead places the background outside its scroll
-            /// view, so fall back to the smallest scroll view in the window whose
-            /// frame sits under the helper - i.e. the one it fronts, not a
-            /// neighbouring pane's, which a naive descendant search can pick by
-            /// mistake.
-            private static func scrollView(near view: NSView) -> NSScrollView? {
-                if let enclosing = view.enclosingScrollView { return enclosing }
-                guard let root = view.window?.contentView else { return nil }
-
-                let point = view.convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), to: root)
-                var best: NSScrollView?
-                var bestArea = CGFloat.greatestFiniteMagnitude
-                func walk(_ node: NSView) {
-                    if let scroll = node as? NSScrollView {
-                        let frame = scroll.convert(scroll.bounds, to: root)
-                        if frame.contains(point) {
-                            let area = frame.width * frame.height
-                            if area < bestArea {
-                                best = scroll
-                                bestArea = area
-                            }
-                        }
-                    }
-                    node.subviews.forEach(walk)
-                }
-                walk(root)
-                return best
             }
 
             isolated deinit { disconnect() }

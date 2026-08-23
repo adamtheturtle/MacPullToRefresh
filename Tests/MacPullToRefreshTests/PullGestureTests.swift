@@ -98,6 +98,22 @@
         }
 
         @Test
+        func `nested scroll views resolve to the innermost scroll view`() {
+            let outer = NSScrollView(frame: NSRect(x: 0, y: 0, width: 400, height: 400))
+            outer.contentView = NSClipView(frame: outer.bounds)
+            let inner = NSScrollView(frame: NSRect(x: 20, y: 20, width: 200, height: 200))
+            inner.contentView = NSClipView(frame: inner.bounds)
+            outer.documentView = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 800))
+            outer.documentView?.addSubview(inner)
+            inner.documentView = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 800))
+            let helper = NSView(frame: NSRect(x: 30, y: 30, width: 10, height: 10))
+            inner.documentView?.addSubview(helper)
+
+            let found = PullScrollViewLocator.scrollView(near: helper)
+            #expect(found === inner)
+        }
+
+        @Test
         func `refresh indicator respects Reduce Motion`() {
             #expect(PullIndicator.continuouslyRotates(
                 pull: 1,
