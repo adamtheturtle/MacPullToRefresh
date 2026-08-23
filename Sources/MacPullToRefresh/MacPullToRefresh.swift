@@ -443,9 +443,14 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
             coordinator.configureIndicator(makeIndicator: makeIndicator)
             // Retry in case the scroll view wasn't reachable at first window attach.
             coordinator.connect(from: nsView)
-            // The gap is opened mid-pull by the coordinator; close it once the refresh
-            // finishes (the true -> false edge).
-            if coordinator.wasRefreshing, !isRefreshing { coordinator.closeGap() }
+            // Programmatic refresh never crosses the pull threshold, so open the gap
+            // when the refresh flag rises; pull-driven refreshes may already have it open.
+            // Close it once the refresh finishes (the true -> false edge).
+            if isRefreshing, !coordinator.wasRefreshing {
+                coordinator.openGapForRefresh()
+            } else if coordinator.wasRefreshing, !isRefreshing {
+                coordinator.closeGap()
+            }
             coordinator.wasRefreshing = isRefreshing
             // Drive the hosted indicator's spin/fade from the refresh flag.
             coordinator.setRefreshing(isRefreshing)
@@ -815,6 +820,16 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                     guard !self.currentRefreshing, !self.isLiveScrolling else { return }
                     self.setPull(0)
                 }
+            }
+
+            /// Opens the refresh gap for a programmatic start (no mid-pull reserve).
+            func openGapForRefresh() {
+                guard let scrollView else { return }
+
+                if !gapOpen, !isClosingGap {
+                    baselineTopInset = scrollView.contentInsets.top
+                }
+                openGap()
             }
 
             /// Reserves the top gap by enlarging the scroll view's top content inset.
