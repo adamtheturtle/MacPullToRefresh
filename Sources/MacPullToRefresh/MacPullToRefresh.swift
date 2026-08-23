@@ -447,11 +447,6 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
             /// view's top inset does not describe the baseline during this window and must
             /// not be mistaken for it.
             private(set) var isClosingGap = false
-            /// Set when a release armed a refresh. The pull is deliberately left at full
-            /// reveal until the refresh flag round-trips back through SwiftUI, so the
-            /// indicator never renders as "not pulling, not refreshing" — which is fully
-            /// transparent — for the frames in between.
-            private var awaitingRefreshHandoff = false
             /// Tracks the refresh flag across `updateNSView` calls so the gap closes on
             /// the refresh-finished edge.
             var wasRefreshing = false
@@ -475,7 +470,16 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
             private var isMousePulling = false
             private var mouseUpMonitor: Any?
 
-            private var connectAttempts = 0
+            /// Bounded connect retries while waiting for a `List` to materialize its
+            /// `NSScrollView`. Exposed for tests that assert the give-up path.
+            static let maxConnectAttempts = 60
+
+            private(set) var connectAttempts = 0
+            /// Whether the most recent failed `connect(from:)` scheduled another retry.
+            private(set) var didScheduleConnectRetry = false
+            /// True between an armed release and `setRefreshing(true)` (or the hand-off
+            /// fallback). Exposed so tests can assert the fallback path.
+            private(set) var awaitingRefreshHandoff = false
 
             func connect(from view: NSView) {
                 guard let candidate = PullScrollViewLocator.scrollView(near: view) else {
@@ -487,7 +491,8 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                     // next runloop ticks until it exists (bounded so we give up rather
                     // than spin forever if there genuinely is no scroll view).
                     connectAttempts += 1
-                    if connectAttempts <= 60 {
+                    if connectAttempts <= Self.maxConnectAttempts {
+                        didScheduleConnectRetry = true
                         let generation = connectionGeneration
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak view] in
                             guard let self, let view,
@@ -495,6 +500,8 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                             else { return }
                             self.connect(from: view)
                         }
+                    } else {
+                        didScheduleConnectRetry = false
                     }
                     return
                 }
@@ -505,6 +512,7 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                 }
 
                 connectAttempts = 0
+                didScheduleConnectRetry = false
                 connectionGeneration += 1
                 scrollView = candidate
                 originalContentInsets = candidate.contentInsets

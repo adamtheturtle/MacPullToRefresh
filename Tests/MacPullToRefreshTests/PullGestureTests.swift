@@ -402,5 +402,122 @@
             #expect(second.scrollView.contentInsets.top == 16)
             #expect(second.scrollView.verticalScrollElasticity == .automatic)
         }
+
+        @Test
+        func `scrollView near prefers the enclosing scroll view`() {
+            let harness = PullHarness()
+            let found = PullScrollViewLocator.scrollView(near: harness.finder)
+            #expect(found === harness.scrollView)
+        }
+
+        @Test
+        func `scrollView near window walk picks the smallest covering scroll view`() {
+            // Issue #28: when the helper is not inside a scroll view (List background
+            // placement), walk the window and prefer the smallest frame that contains
+            // the helper — not a neighbouring, larger pane.
+            _ = NSApplication.shared
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+            window.isReleasedWhenClosed = false
+            let root = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+            window.contentView = root
+
+            let large = NSScrollView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+            let small = NSScrollView(frame: NSRect(x: 40, y: 40, width: 200, height: 200))
+            root.addSubview(large)
+            root.addSubview(small)
+
+            let helper = NSView(frame: NSRect(x: 50, y: 50, width: 20, height: 20))
+            root.addSubview(helper)
+
+            let found = PullScrollViewLocator.scrollView(near: helper)
+            #expect(found === small)
+            window.contentView = nil
+            window.close()
+        }
+
+        @Test
+        func `connection retry gives up after the attempt budget`() {
+            let coordinator = PullToRefreshScrollBridge.Coordinator()
+            let orphan = NSView(frame: .zero)
+
+            for _ in 1 ... PullToRefreshScrollBridge.Coordinator.maxConnectAttempts {
+                coordinator.connect(from: orphan)
+                #expect(coordinator.didScheduleConnectRetry)
+            }
+            coordinator.connect(from: orphan)
+            #expect(coordinator.connectAttempts ==
+                PullToRefreshScrollBridge.Coordinator.maxConnectAttempts + 1)
+            #expect(!coordinator.didScheduleConnectRetry)
+            // Invalidate any timers scheduled during the budgeted retries.
+            coordinator.disconnect()
+        }
+
+        @Test
+        func `handoff fallback clears a stuck full reveal`() async {
+            // Issue #30: if release arms a refresh but SwiftUI never round-trips
+            // setRefreshing(true), the 0.5s fallback must clear the spinning pull.
+            let harness = PullHarness()
+            harness.coordinator.onTrigger = {}
+
+            harness.beginPull()
+            harness.drag(past: 60)
+            harness.release()
+            #expect(harness.coordinator.awaitingRefreshHandoff)
+            #expect(harness.coordinator.currentPull == 1)
+
+            try? await Task.sleep(for: .milliseconds(600))
+
+            #expect(!harness.coordinator.awaitingRefreshHandoff)
+            #expect(harness.coordinator.currentPull == 0)
+        }
+
+        @Test
+        func `disconnect mid closeGap restores insets before the animation ends`() {
+            // Issue #62: removal during the 0.3s close must not leave an enlarged inset.
+            let harness = PullHarness(baselineTopInset: 10)
+            harness.beginPull()
+            harness.drag(past: 60)
+            harness.release()
+            #expect(harness.coordinator.gapOpen || harness.scrollView.contentInsets.top == 54)
+
+            harness.coordinator.closeGap()
+            #expect(harness.coordinator.isClosingGap)
+            harness.coordinator.disconnect()
+
+            #expect(harness.scrollView.contentInsets.top == 10)
+            #expect(!harness.coordinator.isClosingGap)
+            #expect(!harness.coordinator.gapOpen)
+        }
+
+        @Test
+        func `reconnect after a list rebuilds its scroll view restores the new host`() {
+            // Issue #63: SwiftUI can replace the backing NSScrollView; connect must
+            // detach the stale host and attach the replacement.
+            let coordinator = PullToRefreshScrollBridge.Coordinator()
+            let first = PullHarness(
+                baselineTopInset: 4,
+                verticalScrollElasticity: .none,
+                postsBoundsChangedNotifications: false,
+                coordinator: coordinator
+            )
+            #expect(first.scrollView.verticalScrollElasticity == .allowed)
+
+            let rebuilt = PullHarness(
+                baselineTopInset: 12,
+                verticalScrollElasticity: .automatic,
+                postsBoundsChangedNotifications: false,
+                coordinator: coordinator
+            )
+            #expect(first.scrollView.verticalScrollElasticity == .none)
+            #expect(rebuilt.scrollView.verticalScrollElasticity == .allowed)
+            #expect(rebuilt.scrollView.contentView.postsBoundsChangedNotifications)
+            #expect(coordinator.baselineTopInset == 12)
+            coordinator.disconnect()
+        }
     }
 #endif
