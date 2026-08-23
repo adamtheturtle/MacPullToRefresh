@@ -105,10 +105,11 @@ public extension View {
     /// one by one as the user drags and spin while the refresh runs, mirroring
     /// `UIRefreshControl`'s activity indicator. Extracted from the modifier so it can
     /// be driven directly from fixed `pull`/`isRefreshing` values (and previewed).
-    struct PullIndicator: View {
+    public struct PullIndicator: View {
         /// 0…1 as the user drags past the top; reveals the spokes in turn.
-        var pull: CGFloat
-        var isRefreshing: Bool
+        public var pull: CGFloat
+        /// Whether a refresh action is currently running.
+        public var isRefreshing: Bool
 
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -125,7 +126,12 @@ public extension View {
         /// waiting a beat for the refresh to start.
         private var spinning: Bool { isRefreshing || pull >= 1 }
 
-        static func continuouslyRotates(
+        public init(pull: CGFloat, isRefreshing: Bool) {
+            self.pull = pull
+            self.isRefreshing = isRefreshing
+        }
+
+        public static func continuouslyRotates(
             pull: CGFloat,
             isRefreshing: Bool,
             reduceMotion: Bool
@@ -133,7 +139,7 @@ public extension View {
             (isRefreshing || pull >= 1) && !reduceMotion
         }
 
-        var body: some View {
+        public var body: some View {
             Group {
                 if Self.continuouslyRotates(
                     pull: pull,

@@ -16,3 +16,8 @@ an async refresh action.
 ### Refreshing
 
 - ``SwiftUICore/View/macPullToRefresh(_:)``
+
+### Indicator
+
+- ``PullIndicator``
+- ``PullIndicator/continuouslyRotates(pull:isRefreshing:reduceMotion:)``
