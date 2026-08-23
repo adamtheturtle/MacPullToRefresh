@@ -611,7 +611,12 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                     }
                     return
                 }
-                guard candidate !== scrollView else { return }
+                guard candidate !== scrollView else {
+                    // Document or clip size may have changed since the initial connect
+                    // (filtering, deletions, window resize); re-apply the short-list bump.
+                    ensureScrollableRubberBand(in: candidate)
+                    return
+                }
 
                 if scrollView != nil {
                     disconnect()
@@ -747,6 +752,8 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
 
             @objc private func boundsChanged() {
                 guard let scrollView else { return }
+
+                ensureScrollableRubberBand(in: scrollView)
 
                 // The hosted indicator is a clip-view subview, so AppKit already carries
                 // it along with this scroll — nothing to reposition here. While a refresh
@@ -901,10 +908,19 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                 guard let document = scrollView.documentView else { return }
 
                 let visibleHeight = scrollView.contentView.bounds.height
+                // A document that is taller than our +1 bump is naturally scrollable (or was
+                // replaced). Drop bump bookkeeping so we do not shrink it on the next pass.
+                if document.frame.height > visibleHeight + 1 {
+                    originalDocumentHeight = nil
+                    return
+                }
                 if document.frame.height <= visibleHeight {
                     if originalDocumentHeight == nil {
                         originalDocumentHeight = document.frame.height
                     }
+                    document.frame.size.height = visibleHeight + 1
+                } else if let original = originalDocumentHeight, original <= visibleHeight {
+                    // Still on our bump after a clip resize — keep it one point past the clip.
                     document.frame.size.height = visibleHeight + 1
                 }
             }
