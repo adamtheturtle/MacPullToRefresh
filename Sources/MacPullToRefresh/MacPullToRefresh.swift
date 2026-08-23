@@ -783,11 +783,7 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                 // button is held. Arm only once the clip has actually over-scrolled.
                 let mouseDown = NSEvent.pressedMouseButtons & (1 << 0) != 0
                 if mouseDown, !isLiveScrolling, !isMousePulling {
-                    let probeBaseline = (!gapOpen && !isClosingGap)
-                        ? scrollView.contentInsets.top
-                        : baselineTopInset
-                    let probe = max(0, -scrollView.contentView.bounds.origin.y - probeBaseline)
-                    if probe > 0 {
+                    if mouseArmingProbe(in: scrollView) > 0 {
                         beginMousePull()
                     }
                 }
@@ -841,6 +837,18 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
 
             private func mousePullEnded() {
                 finishPullGesture(fromLiveScroll: false)
+            }
+
+            /// Test hook for mouse arming while the gap is open or closing.
+            func mouseArmingProbe(in scrollView: NSScrollView) -> CGFloat {
+                let gapRestOffset = (gapOpen || isClosingGap) ? refreshGap : 0
+                let probeBaseline = (!gapOpen && !isClosingGap)
+                    ? scrollView.contentInsets.top
+                    : baselineTopInset
+                return max(
+                    0,
+                    -scrollView.contentView.bounds.origin.y - probeBaseline - gapRestOffset
+                )
             }
 
             /// Arms a mouse-driven pull: reset peak tracking and re-capture baseline.
