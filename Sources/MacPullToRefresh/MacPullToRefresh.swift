@@ -776,9 +776,17 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
 
                 // Ignore bounds changes that aren't part of a user scroll (launch, list
                 // reloads, programmatic layout) so the indicator only reveals on a pull.
+                // Mouse-down alone is not enough: layout passes also move bounds while the
+                // button is held. Arm only once the clip has actually over-scrolled.
                 let mouseDown = NSEvent.pressedMouseButtons & (1 << 0) != 0
                 if mouseDown, !isLiveScrolling, !isMousePulling {
-                    beginMousePull()
+                    let probeBaseline = (!gapOpen && !isClosingGap)
+                        ? scrollView.contentInsets.top
+                        : baselineTopInset
+                    let probe = max(0, -scrollView.contentView.bounds.origin.y - probeBaseline)
+                    if probe > 0 {
+                        beginMousePull()
+                    }
                 }
                 guard isLiveScrolling || isMousePulling else { return }
 
