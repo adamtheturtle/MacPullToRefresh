@@ -230,7 +230,7 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
             if pull >= 1 { return PullRefreshAccessibility.ready }
             if pull <= 0 { return PullRefreshAccessibility.pulling }
             let percent = Int((pull * 100).rounded(.down))
-            return "\(PullRefreshAccessibility.pulling), \(percent) percent"
+            return PullRefreshAccessibility.pullingProgress(percent: percent)
         }
 
         /// Pull progress toward the arming threshold, clamped to 0…1.

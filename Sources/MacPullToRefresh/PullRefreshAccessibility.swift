@@ -40,5 +40,15 @@
             bundle: .module,
             comment: "VoiceOver value while the user is pulling but not yet armed"
         )
+
+        /// VoiceOver value while pulling, including progress toward the arming threshold.
+        public static func pullingProgress(percent: Int) -> String {
+            let format = String(
+                localized: "Pulling, %lld percent",
+                defaultValue: "Pulling, %lld percent",
+                comment: "VoiceOver value while pulling; percent is 0–99 progress toward arming"
+            )
+            return String(format: format, locale: .current, Int64(percent))
+        }
     }
 #endif
