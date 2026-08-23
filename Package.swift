@@ -1,5 +1,8 @@
 // swift-tools-version: 6.2
+import Foundation
 import PackageDescription
+
+let buildDocumentation = ProcessInfo.processInfo.environment["MACPULL_BUILD_DOCS"] != nil
 
 let package = Package(
     name: "MacPullToRefresh",
@@ -13,6 +16,8 @@ let package = Package(
     targets: [
         .target(
             name: "MacPullToRefresh",
+            exclude: buildDocumentation ? [] : ["MacPullToRefresh.docc"],
+            resources: buildDocumentation ? [.copy("MacPullToRefresh.docc")] : [],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
                 .defaultIsolation(MainActor.self),
@@ -20,7 +25,6 @@ let package = Package(
                 .enableUpcomingFeature("InferIsolatedConformances")
             ]
         ),
-        // A tiny runnable app for trying the gesture live (⌘R the "Demo" scheme).
         .executableTarget(
             name: "Demo",
             dependencies: ["MacPullToRefresh"],
@@ -43,3 +47,9 @@ let package = Package(
         )
     ]
 )
+
+if buildDocumentation {
+    package.dependencies.append(
+        .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.0.0")
+    )
+}
