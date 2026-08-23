@@ -54,7 +54,6 @@ public extension View {
     }
 
     /// Adds pull-to-refresh with a custom indicator view on macOS.
-    @ViewBuilder
     func macPullToRefresh<I: View>(
         threshold: CGFloat = 44,
         refreshGap: CGFloat = 44,
@@ -62,29 +61,24 @@ public extension View {
         indicator: @escaping (_ pull: CGFloat, _ isRefreshing: Bool) -> I,
         _ action: @escaping () async throws -> Void
     ) -> some View {
-        if isEnabled {
-            #if os(macOS)
-                let safeThreshold = sanitizedPullDistance(threshold, fallback: 44)
-                let safeGap = sanitizedPullDistance(refreshGap, fallback: safeThreshold)
-                modifier(MacPullToRefresh(
-                    action: action,
-                    trigger: nil as UInt64?,
-                    threshold: safeThreshold,
-                    refreshGap: safeGap,
-                    indicator: indicator
-                ))
-            #else
-                refreshable {
-                    do {
-                        try await action()
-                    } catch {
-                        // Always clear the native refresh control; callers own errors.
-                    }
-                }
-            #endif
-        } else {
-            self
-        }
+        #if os(macOS)
+            let safeThreshold = sanitizedPullDistance(threshold, fallback: 44)
+            let safeGap = sanitizedPullDistance(refreshGap, fallback: safeThreshold)
+            return modifier(MacPullToRefresh(
+                action: action,
+                trigger: nil as UInt64?,
+                threshold: safeThreshold,
+                refreshGap: safeGap,
+                isEnabled: isEnabled,
+                indicator: indicator
+            ))
+        #else
+            return modifier(IOSPullToRefresh(
+                isEnabled: isEnabled,
+                trigger: nil as UInt64?,
+                action: action
+            ))
+        #endif
     }
 
     /// Adds pull-to-refresh and also runs `action` whenever `trigger` changes to a new
@@ -107,28 +101,59 @@ public extension View {
                 trigger: Optional(trigger),
                 threshold: 44,
                 refreshGap: 44,
+                isEnabled: true,
                 indicator: HostedIndicator.init
             ))
         #else
-            return refreshable {
-                do {
-                    try await action()
-                } catch {
-                    // Always clear the native refresh control; callers own errors.
-                }
-            }
-            .onChange(of: trigger) { _ in
-                Task {
-                    do {
-                        try await action()
-                    } catch {
-                        // Always clear the native refresh control; callers own errors.
-                    }
-                }
-            }
+            return modifier(IOSPullToRefresh(
+                isEnabled: true,
+                trigger: Optional(trigger),
+                action: action
+            ))
         #endif
     }
 }
+
+#if !os(macOS)
+    /// Stable-type iOS wrapper so enabling/disabling refresh does not swap the view type.
+    private struct IOSPullToRefresh<Trigger: Equatable>: ViewModifier {
+        let isEnabled: Bool
+        let trigger: Trigger?
+        let action: () async throws -> Void
+
+        @State private var isRefreshing = false
+        @State private var didAppear = false
+
+        func body(content: Content) -> some View {
+            Group {
+                if isEnabled {
+                    content.refreshable {
+                        await runAction()
+                    }
+                } else {
+                    content
+                }
+            }
+            .onAppear { didAppear = true }
+            .onChange(of: trigger) { newValue in
+                guard isEnabled, didAppear, newValue != nil, !isRefreshing else { return }
+                Task {
+                    isRefreshing = true
+                    await runAction()
+                    isRefreshing = false
+                }
+            }
+        }
+
+        private func runAction() async {
+            do {
+                try await action()
+            } catch {
+                // Always clear the native refresh control; callers own errors.
+            }
+        }
+    }
+#endif
 
 /// Ensures pull distances used for arming and gap sizing stay positive and finite.
 func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
@@ -142,6 +167,7 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
         let trigger: Trigger?
         let threshold: CGFloat
         let refreshGap: CGFloat
+        let isEnabled: Bool
         let indicator: (CGFloat, Bool) -> I
 
         @State private var isRefreshing = false
@@ -149,21 +175,25 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
         @State private var refreshTask: Task<Void, Never>?
 
         func body(content: Content) -> some View {
+            // Always wrap `content` in the same modifier type so toggling `isEnabled`
+            // does not rebuild the scroll hierarchy via `_ConditionalContent`.
             content
-                .background(
-                    PullToRefreshScrollBridge(
-                        threshold: threshold,
-                        refreshGap: refreshGap,
-                        isRefreshing: isRefreshing,
-                        indicator: indicator
-                    ) {
-                        startRefresh()
+                .background {
+                    if isEnabled {
+                        PullToRefreshScrollBridge(
+                            threshold: threshold,
+                            refreshGap: refreshGap,
+                            isRefreshing: isRefreshing,
+                            indicator: indicator
+                        ) {
+                            startRefresh()
+                        }
                     }
-                )
+                }
                 .onAppear { didAppear = true }
                 // macOS 13-compatible onChange (single-parameter form).
                 .onChange(of: trigger) { newValue in
-                    guard didAppear, newValue != nil else { return }
+                    guard isEnabled, didAppear, newValue != nil else { return }
                     startRefresh()
                 }
                 .onDisappear {
@@ -177,7 +207,7 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
         }
 
         private func startRefresh() {
-            guard !isRefreshing else { return }
+            guard isEnabled, !isRefreshing else { return }
 
             isRefreshing = true
             refreshTask?.cancel()
