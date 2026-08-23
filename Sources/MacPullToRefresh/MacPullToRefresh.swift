@@ -140,14 +140,18 @@ public extension View {
         let trigger: Trigger?
         let action: () async throws -> Void
 
-        @State private var isRefreshing = false
         @State private var didAppear = false
+        @State private var triggerTask: Task<Void, Never>?
 
         func body(content: Content) -> some View {
             Group {
                 if isEnabled {
                     content.refreshable {
-                        await runAction()
+                        do {
+                            try await action()
+                        } catch {
+                            // Always clear the native refresh control; callers own errors.
+                        }
                     }
                 } else {
                     content
@@ -155,20 +159,19 @@ public extension View {
             }
             .onAppear { didAppear = true }
             .onChange(of: trigger) { newValue in
-                guard isEnabled, didAppear, newValue != nil, !isRefreshing else { return }
-                Task { await runAction() }
+                guard isEnabled, didAppear, newValue != nil else { return }
+                triggerTask?.cancel()
+                triggerTask = Task {
+                    do {
+                        try await action()
+                    } catch {
+                        // Callers own error presentation.
+                    }
+                }
             }
-        }
-
-        private func runAction() async {
-            guard !isRefreshing else { return }
-
-            isRefreshing = true
-            defer { isRefreshing = false }
-            do {
-                try await action()
-            } catch {
-                // Always clear the native refresh control; callers own errors.
+            .onDisappear {
+                triggerTask?.cancel()
+                triggerTask = nil
             }
         }
     }
