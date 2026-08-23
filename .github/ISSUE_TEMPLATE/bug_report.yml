@@ -1,0 +1,46 @@
+name: Bug report
+description: Report incorrect pull-to-refresh behavior
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps or a small sample view.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: dropdown
+    id: container
+    attributes:
+      label: Scroll container
+      options:
+        - List
+        - ScrollView
+        - Other / unknown
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Environment
+      description: "macOS / iOS version, Xcode, and MacPullToRefresh version"
+    validations:
+      required: true
