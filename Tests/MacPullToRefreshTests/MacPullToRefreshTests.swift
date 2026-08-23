@@ -56,6 +56,21 @@ struct MacPullToRefreshTests {
             .macPullToRefresh(threshold: 60, refreshGap: 48) { }
         #expect(view is (any View))
     }
+
+    @Test
+    func `a disabled modifier remains a plain view`() {
+        let view = List { Text("row") }
+            .macPullToRefresh(isEnabled: false) { }
+        #expect(view is (any View))
+    }
+
+    @Test
+    func `a throwing action is accepted by the modifier`() {
+        enum Sample: Error { case boom }
+        let view = List { Text("row") }
+            .macPullToRefresh { throw Sample.boom }
+        #expect(view is (any View))
+    }
 }
 
 /// A tiny actor so the test can assert the refresh closure was never called during view

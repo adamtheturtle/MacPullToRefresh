@@ -33,24 +33,41 @@ public extension View {
     ///     are not finite or are `<= 0` fall back to `44`. Ignored on iOS.
     ///   - refreshGap: Top inset held open while a refresh runs on macOS. Values that are
     ///     not finite or are `<= 0` fall back to the sanitized `threshold`. Ignored on iOS.
-    ///   - action: Async work to run when a refresh is triggered.
+    ///   - isEnabled: When `false`, the modifier is a no-op and no pull gesture or native
+    ///     refresh control is installed.
+    ///   - action: Async work to run when a refresh is triggered. Throwing actions are
+    ///     supported; errors are caught so the in-flight refresh always completes (the gap
+    ///     closes and the spinner clears). Call sites that need to surface a failure should
+    ///     handle it inside `action`.
+    @ViewBuilder
     func macPullToRefresh(
         threshold: CGFloat = 44,
         refreshGap: CGFloat = 44,
-        _ action: @escaping () async -> Void
+        isEnabled: Bool = true,
+        _ action: @escaping () async throws -> Void
     ) -> some View {
-        #if os(macOS)
-            let safeThreshold = sanitizedPullDistance(threshold, fallback: 44)
-            let safeGap = sanitizedPullDistance(refreshGap, fallback: safeThreshold)
-            return modifier(MacPullToRefresh(
-                action: action,
-                trigger: nil as UInt64?,
-                threshold: safeThreshold,
-                refreshGap: safeGap
-            ))
-        #else
-            return refreshable { await action() }
-        #endif
+        if isEnabled {
+            #if os(macOS)
+                let safeThreshold = sanitizedPullDistance(threshold, fallback: 44)
+                let safeGap = sanitizedPullDistance(refreshGap, fallback: safeThreshold)
+                modifier(MacPullToRefresh(
+                    action: action,
+                    trigger: nil as UInt64?,
+                    threshold: safeThreshold,
+                    refreshGap: safeGap
+                ))
+            #else
+                refreshable {
+                    do {
+                        try await action()
+                    } catch {
+                        // Always clear the native refresh control; callers own errors.
+                    }
+                }
+            #endif
+        } else {
+            self
+        }
     }
 
     /// Adds pull-to-refresh and also runs `action` whenever `trigger` changes to a new
@@ -65,16 +82,28 @@ public extension View {
     /// ```
     func macPullToRefresh<Trigger: Equatable>(
         trigger: Trigger,
-        _ action: @escaping () async -> Void
+        _ action: @escaping () async throws -> Void
     ) -> some View {
         #if os(macOS)
             return modifier(MacPullToRefresh(action: action, trigger: Optional(trigger),
                                               threshold: 44, refreshGap: 44))
         #else
-            return refreshable { await action() }
-                .onChange(of: trigger) { _ in
-                    Task { await action() }
+            return refreshable {
+                do {
+                    try await action()
+                } catch {
+                    // Always clear the native refresh control; callers own errors.
                 }
+            }
+            .onChange(of: trigger) { _ in
+                Task {
+                    do {
+                        try await action()
+                    } catch {
+                        // Always clear the native refresh control; callers own errors.
+                    }
+                }
+            }
         #endif
     }
 }
@@ -87,7 +116,7 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
 #if os(macOS)
 
     private struct MacPullToRefresh<Trigger: Equatable>: ViewModifier {
-        let action: () async -> Void
+        let action: () async throws -> Void
         let trigger: Trigger?
         let threshold: CGFloat
         let refreshGap: CGFloat
@@ -121,7 +150,11 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
 
             isRefreshing = true
             Task {
-                await action()
+                do {
+                    try await action()
+                } catch {
+                    // Always clear the refresh UI; callers own error presentation.
+                }
                 isRefreshing = false
             }
         }
