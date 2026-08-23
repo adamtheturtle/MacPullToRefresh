@@ -20,6 +20,9 @@ let package = Package(
             // Keep the DocC catalog in the target so Swift Package Index (and local
             // doc builds) always see curated overview/topics. Do not put it in `exclude`
             // or `resources` — DocC discovers `.docc` catalogs from target sources.
+            resources: [
+                .process("Localizable.xcstrings")
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
                 .defaultIsolation(MainActor.self),
