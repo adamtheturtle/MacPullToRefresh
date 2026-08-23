@@ -930,6 +930,18 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                     baselineTopInset = scrollView.contentInsets.top
                 }
                 openGap()
+                // At rest the clip origin sits at the baseline, so the indicator at
+                // `y: -refreshGap` is above the visible bounds. Scroll into the gap
+                // the way a mid-pull reserve does so the spinner is on screen.
+                let clip = scrollView.contentView
+                let targetOrigin = NSPoint(
+                    x: clip.bounds.origin.x,
+                    y: -(baselineTopInset + refreshGap)
+                )
+                if clip.bounds.origin.y > targetOrigin.y {
+                    clip.setBoundsOrigin(targetOrigin)
+                    scrollView.reflectScrolledClipView(clip)
+                }
             }
 
             /// Reserves the top gap by enlarging the scroll view's top content inset.

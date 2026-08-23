@@ -148,6 +148,17 @@
         }
 
         @Test
+        func `openGapForRefresh scrolls the clip so the indicator is visible at rest`() {
+            let harness = PullHarness(baselineTopInset: 8)
+            let clip = harness.scrollView.contentView
+            #expect(clip.bounds.origin.y == -8)
+
+            harness.coordinator.openGapForRefresh()
+
+            #expect(clip.bounds.origin.y == -(8 + harness.threshold))
+        }
+
+        @Test
         func `closeGap begins closing while holding the gap inset`() {
             // Core Animation completions do not run in this headless harness (no window /
             // run loop), so assert the mid-close state that is reachable here. The 0.3s
