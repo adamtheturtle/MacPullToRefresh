@@ -105,6 +105,25 @@
 
 
         @Test
+        func `mouse up after a live-scroll trigger does not cancel the gap`() {
+            let harness = PullHarness()
+            var triggered = 0
+            harness.coordinator.onTrigger = { triggered += 1 }
+
+            harness.coordinator.beginMousePullForTesting()
+            harness.beginPull()
+            harness.drag(past: 60)
+            harness.release()
+            #expect(triggered == 1)
+            #expect(harness.coordinator.gapOpen)
+
+            harness.coordinator.mousePullEndedForTesting()
+            #expect(triggered == 1)
+            #expect(harness.coordinator.gapOpen)
+            #expect(harness.coordinator.currentPull == 1)
+        }
+
+        @Test
         func `openGapForRefresh reserves the gap without a pull`() {
             let harness = PullHarness(baselineTopInset: 8)
             #expect(!harness.coordinator.gapOpen)

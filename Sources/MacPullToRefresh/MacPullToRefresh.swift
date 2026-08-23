@@ -758,6 +758,9 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
 
             @objc private func liveScrollStarted() {
                 isLiveScrolling = true
+                // A prior mouse-down arming must not outlive a live-scroll gesture, or
+                // mouse-up would finish the pull a second time.
+                isMousePulling = false
                 overscroll = 0
                 peakOverscroll = 0
                 // Capture the resting top inset (e.g. under a title bar) at the start of
@@ -862,6 +865,7 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
             private func finishPullGesture(fromLiveScroll: Bool) {
                 if fromLiveScroll {
                     isLiveScrolling = false
+                    isMousePulling = false
                 } else {
                     guard isMousePulling else { return }
                     isMousePulling = false
