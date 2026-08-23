@@ -100,7 +100,6 @@ public extension View {
     ///     not finite or are `<= 0` fall back to the sanitized `threshold`. Ignored on iOS.
     ///   - isEnabled: When `false`, the modifier is a no-op.
     ///   - action: Async work to run on pull or trigger. Throwing actions are supported.
-    @ViewBuilder
     func macPullToRefresh<Trigger: Equatable>(
         trigger: Trigger,
         threshold: CGFloat = 44,
@@ -108,28 +107,24 @@ public extension View {
         isEnabled: Bool = true,
         _ action: @escaping () async throws -> Void
     ) -> some View {
-        if isEnabled {
-            #if os(macOS)
-                let safeThreshold = sanitizedPullDistance(threshold, fallback: 44)
-                let safeGap = sanitizedPullDistance(refreshGap, fallback: safeThreshold)
-                modifier(MacPullToRefresh(
-                    action: action,
-                    trigger: Optional(trigger),
-                    threshold: safeThreshold,
-                    refreshGap: safeGap,
-                    isEnabled: true,
-                    indicator: HostedIndicator.init
-                ))
-            #else
-                modifier(IOSPullToRefresh(
-                    isEnabled: true,
-                    trigger: Optional(trigger),
-                    action: action
-                ))
-            #endif
-        } else {
-            self
-        }
+        #if os(macOS)
+            let safeThreshold = sanitizedPullDistance(threshold, fallback: 44)
+            let safeGap = sanitizedPullDistance(refreshGap, fallback: safeThreshold)
+            return modifier(MacPullToRefresh(
+                action: action,
+                trigger: Optional(trigger),
+                threshold: safeThreshold,
+                refreshGap: safeGap,
+                isEnabled: isEnabled,
+                indicator: HostedIndicator.init
+            ))
+        #else
+            return modifier(IOSPullToRefresh(
+                isEnabled: isEnabled,
+                trigger: Optional(trigger),
+                action: action
+            ))
+        #endif
     }
 }
 
