@@ -89,7 +89,7 @@
 
     @Suite("Pull gesture state machine")
     @MainActor
-    struct PullGestureTests {
+    struct PullGestureTests { // swiftlint:disable:this type_body_length
         @Test
         func `mouse pull release triggers a refresh without live scroll notifications`() {
             let harness = PullHarness()
