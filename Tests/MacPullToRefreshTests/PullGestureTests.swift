@@ -104,6 +104,25 @@
         }
 
         @Test
+        func `closeGap restores the baseline inset after animation`() async {
+            let harness = PullHarness(baselineTopInset: 8)
+
+            harness.beginPull()
+            harness.drag(past: 60)
+            harness.release()
+            #expect(harness.coordinator.gapOpen)
+
+            harness.coordinator.closeGap()
+            #expect(harness.coordinator.isClosingGap)
+
+            try? await Task.sleep(for: .milliseconds(350))
+
+            #expect(!harness.coordinator.isClosingGap)
+            #expect(!harness.coordinator.gapOpen)
+            #expect(harness.scrollView.contentInsets.top == 8)
+        }
+
+        @Test
         func `refresh indicator exposes meaningful accessibility states`() {
             #expect(HostedIndicator.accessibilityStatus(pull: 0.5, isRefreshing: false) ==
                 "Pulling, 50 percent")
