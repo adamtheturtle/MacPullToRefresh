@@ -136,6 +136,29 @@
         }
 
         @Test
+        func `a mouse cancel during refresh does not close the gap`() {
+            let harness = PullHarness()
+            var triggered = 0
+            harness.coordinator.onTrigger = { triggered += 1 }
+
+            harness.beginPull()
+            harness.drag(past: 60)
+            harness.release()
+            #expect(triggered == 1)
+            #expect(harness.coordinator.gapOpen)
+
+            harness.coordinator.setRefreshing(true)
+            harness.coordinator.wasRefreshing = true
+
+            harness.coordinator.beginMousePullForTesting()
+            harness.drag(past: 10)
+            harness.coordinator.mousePullEndedForTesting()
+
+            #expect(triggered == 1)
+            #expect(harness.coordinator.gapOpen)
+        }
+
+        @Test
         func `openGapForRefresh reserves the gap without a pull`() {
             let harness = PullHarness(baselineTopInset: 8)
             #expect(!harness.coordinator.gapOpen)
