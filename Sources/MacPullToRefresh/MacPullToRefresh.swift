@@ -707,7 +707,13 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                             originalPostsBoundsChangedNotifications
                     }
                     if let originalDocumentHeight, let document = scrollView.documentView {
-                        document.frame.size.height = originalDocumentHeight
+                        let current = document.frame.size.height
+                        let visibleHeight = scrollView.contentView.bounds.height
+                        // Only restore when still on the rubber-band bump, not after the
+                        // document grew past it while connected.
+                        if current <= max(originalDocumentHeight, visibleHeight) + 1 {
+                            document.frame.size.height = originalDocumentHeight
+                        }
                     }
                 }
 

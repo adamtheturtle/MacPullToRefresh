@@ -217,6 +217,26 @@
         }
 
         @Test
+        func `disconnect leaves a document that grew past the rubber-band bump`() {
+            let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 300, height: 400))
+            scrollView.contentView = UnconstrainedClipView(frame: scrollView.bounds)
+            let document = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 80))
+            scrollView.documentView = document
+            let finder = NSView(frame: .zero)
+            document.addSubview(finder)
+
+            let coordinator = PullToRefreshScrollBridge.Coordinator()
+            coordinator.threshold = 44
+            coordinator.refreshGap = 44
+            coordinator.connect(from: finder)
+            #expect(document.frame.height == 401)
+
+            document.frame.size.height = 900
+            coordinator.disconnect()
+            #expect(document.frame.height == 900)
+        }
+
+        @Test
         func `rubber-band bump reapplies when the clip grows while connected`() {
             let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 300, height: 400))
             scrollView.contentView = UnconstrainedClipView(frame: scrollView.bounds)
