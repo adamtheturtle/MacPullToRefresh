@@ -16,8 +16,9 @@ let package = Package(
     targets: [
         .target(
             name: "MacPullToRefresh",
-            exclude: buildDocumentation ? [] : ["MacPullToRefresh.docc"],
-            resources: buildDocumentation ? [.copy("MacPullToRefresh.docc")] : [],
+            // Keep the DocC catalog in the target so Swift Package Index (and local
+            // doc builds) always see curated overview/topics. Do not put it in `exclude`
+            // or `resources` — DocC discovers `.docc` catalogs from target sources.
             swiftSettings: [
                 .swiftLanguageMode(.v6),
                 .defaultIsolation(MainActor.self),
