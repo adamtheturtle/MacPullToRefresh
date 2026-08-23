@@ -800,8 +800,14 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
 
                 // While a refresh runs, keep measuring over-scroll so a second pull can
                 // announce "already in progress" on release — but do not update the
-                // indicator reveal or re-open the gap.
-                if wasRefreshing { return }
+                // indicator reveal or re-open the gap. Ignore the gap's resting position
+                // so an ordinary scroll ending at rest does not read as a second pull.
+                if wasRefreshing {
+                    let rawOverscroll = max(0, -scrollView.contentView.bounds.origin.y - baselineTopInset)
+                    overscroll = gapOpen ? max(0, rawOverscroll - refreshGap) : rawOverscroll
+                    peakOverscroll = max(peakOverscroll, overscroll)
+                    return
+                }
 
                 // Reserve the gap the instant the pull crosses the threshold — while the
                 // finger is still down — so that when it lifts, the scroll view's own
@@ -902,7 +908,9 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                     scheduleHandoffFallback()
                 } else {
                     setPull(0)
-                    closeGap()
+                    if !currentRefreshing, !wasRefreshing {
+                        closeGap()
+                    }
                 }
             }
 
