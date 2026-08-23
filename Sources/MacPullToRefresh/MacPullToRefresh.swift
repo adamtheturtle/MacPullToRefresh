@@ -613,7 +613,12 @@ public extension View {
                 if overscroll >= threshold, !gapOpen { openGap() }
                 // Reveal the spokes in step with the pull. Driven straight into the hosted
                 // view (no SwiftUI state round-trip) so it stays in lock-step with the drag.
-                setPull(min(1, peakOverscroll / threshold))
+                // Skip hosting updates when the rounded reveal is unchanged — bounds
+                // notifications fire far more often than the indicator needs to redraw.
+                let nextPull = min(1, peakOverscroll / threshold)
+                if nextPull != currentPull {
+                    setPull(nextPull)
+                }
             }
 
             /// The over-scroll at which the pull still counts as armed when the finger
