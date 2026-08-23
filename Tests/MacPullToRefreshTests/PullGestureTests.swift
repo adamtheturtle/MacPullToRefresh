@@ -149,6 +149,28 @@
         }
 
         @Test
+        func `a second arming while refreshing announces and does not re-trigger`() {
+            let harness = PullHarness()
+            var triggered = 0
+            harness.coordinator.onTrigger = { triggered += 1 }
+
+            harness.beginPull()
+            harness.drag(past: 60)
+            harness.release()
+            #expect(triggered == 1)
+
+            harness.coordinator.setRefreshing(true)
+            harness.coordinator.wasRefreshing = true
+
+            harness.beginPull()
+            harness.drag(past: 60)
+            harness.release()
+
+            #expect(triggered == 1)
+            #expect(harness.coordinator.currentPull == 0)
+        }
+
+        @Test
         func `releasing past the threshold triggers a refresh`() {
             let harness = PullHarness()
             var triggered = 0
