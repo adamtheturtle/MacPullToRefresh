@@ -759,6 +759,18 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                 overscroll = 0
                 peakOverscroll = 0
                 if shouldTrigger {
+                    // A pull that arms while a refresh is already running must not restart
+                    // the action (SwiftUI guards that), but announce so VoiceOver is not
+                    // silent when the gesture completes with no visible change.
+                    if currentRefreshing || wasRefreshing {
+                        announce("Refresh already in progress")
+                        setPull(0)
+                        return
+                    }
+                    // Leave the pull at full reveal across the hand-off: `currentRefreshing`
+                    // only flips once `setRefreshing(true)` arrives via `updateNSView`, and
+                    // zeroing the pull before then renders the indicator at opacity 0 for
+                    // those frames, blinking it out exactly where it should come alive.
                     awaitingRefreshHandoff = true
                     onTrigger()
                     scheduleHandoffFallback()
