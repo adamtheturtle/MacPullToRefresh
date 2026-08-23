@@ -3,8 +3,8 @@
 //  Demo
 //
 //  A minimal app for trying MacPullToRefresh live. Run the "Demo" scheme (⌘R),
-//  then drag the list down past the top with a trackpad (two-finger swipe) to
-//  rubber-band past the top edge and trigger a refresh.
+//  then drag the list or scroll view down past the top with a trackpad (two-finger
+//  swipe) to rubber-band past the top edge and trigger a refresh.
 //
 
 import AppKit
@@ -20,7 +20,7 @@ struct DemoApp: App {
 
     var body: some Scene {
         WindowGroup("Pull down to refresh") {
-            DemoView()
+            DemoRootView()
                 .frame(minWidth: 360, minHeight: 480)
         }
     }
@@ -37,7 +37,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-private struct DemoView: View {
+private struct DemoRootView: View {
+    var body: some View {
+        TabView {
+            ListDemoView()
+                .tabItem { Text("List") }
+            ScrollViewDemoView()
+                .tabItem { Text("ScrollView") }
+        }
+    }
+}
+
+private struct ListDemoView: View {
     @State private var rows = Array(1 ... 20)
 
     var body: some View {
@@ -48,8 +59,29 @@ private struct DemoView: View {
             Text("Row \(row)")
         }
         .macPullToRefresh {
-            // Simulate a network round-trip so the spinner is visible, then prepend a
-            // fresh row as visible proof the refresh ran.
+            try? await Task.sleep(for: .seconds(1.5))
+            let next = (rows.first ?? 0) - 1
+            rows.insert(next, at: 0)
+        }
+    }
+}
+
+private struct ScrollViewDemoView: View {
+    @State private var rows = Array(1 ... 20)
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 8) {
+                ForEach(rows, id: \.self) { row in
+                    Text("Row \(row)")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal)
+                        .padding(.vertical, 6)
+                }
+            }
+            .padding(.vertical, 8)
+        }
+        .macPullToRefresh {
             try? await Task.sleep(for: .seconds(1.5))
             let next = (rows.first ?? 0) - 1
             rows.insert(next, at: 0)
