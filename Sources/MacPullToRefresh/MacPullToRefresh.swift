@@ -123,6 +123,7 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
 
         @State private var isRefreshing = false
         @State private var didAppear = false
+        @State private var refreshTask: Task<Void, Never>?
 
         func body(content: Content) -> some View {
             content
@@ -143,19 +144,29 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                     guard didAppear, newValue != nil else { return }
                     startRefresh()
                 }
+                .onDisappear {
+                    // Cancelling the in-flight refresh when the modified view leaves the
+                    // hierarchy lets cooperative actions observe Task.isCancelled and
+                    // stops the spinner from outliving its host.
+                    refreshTask?.cancel()
+                    refreshTask = nil
+                    isRefreshing = false
+                }
         }
 
         private func startRefresh() {
             guard !isRefreshing else { return }
 
             isRefreshing = true
-            Task {
+            refreshTask?.cancel()
+            refreshTask = Task {
                 do {
                     try await action()
                 } catch {
                     // Always clear the refresh UI; callers own error presentation.
                 }
                 isRefreshing = false
+                refreshTask = nil
             }
         }
     }
