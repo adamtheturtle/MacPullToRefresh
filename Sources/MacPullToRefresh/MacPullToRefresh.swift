@@ -87,6 +87,7 @@ public extension View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Refresh")
+                .accessibilityHint("Pull down to refresh")
                 .accessibilityValue(Self.accessibilityStatus(
                     pull: pull,
                     isRefreshing: isRefreshing
