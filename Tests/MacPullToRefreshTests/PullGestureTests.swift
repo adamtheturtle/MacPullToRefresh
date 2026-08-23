@@ -123,6 +123,25 @@
         }
 
         @Test
+        func `a short document still allows rubber-band pulls`() {
+            let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 300, height: 400))
+            scrollView.contentView = UnconstrainedClipView(frame: scrollView.bounds)
+            let document = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 80))
+            scrollView.documentView = document
+            let finder = NSView(frame: .zero)
+            document.addSubview(finder)
+
+            let coordinator = PullToRefreshScrollBridge.Coordinator()
+            coordinator.threshold = 44
+            coordinator.refreshGap = 44
+            coordinator.connect(from: finder)
+
+            #expect(document.frame.height > scrollView.contentView.bounds.height)
+            #expect(scrollView.verticalScrollElasticity == .allowed)
+            coordinator.disconnect()
+        }
+
+        @Test
         func `refresh indicator exposes meaningful accessibility states`() {
             #expect(HostedIndicator.accessibilityStatus(pull: 0.5, isRefreshing: false) ==
                 "Pulling, 50 percent")

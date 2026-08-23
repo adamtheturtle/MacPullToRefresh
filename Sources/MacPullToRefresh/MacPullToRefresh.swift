@@ -522,6 +522,7 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                 baselineTopInset = candidate.contentInsets.top
                 // Guarantee rubber-banding at the top even when the list is short.
                 candidate.verticalScrollElasticity = .allowed
+                ensureScrollableRubberBand(in: candidate)
                 let clip = candidate.contentView
                 clip.postsBoundsChangedNotifications = true
                 let center = NotificationCenter.default
@@ -765,6 +766,17 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                 gapOpen = true
                 scrollView.automaticallyAdjustsContentInsets = false
                 scrollView.contentInsets.top = baselineTopInset + refreshGap
+            }
+
+            /// Short lists whose document is shorter than the clip view cannot rubber-band
+            /// unless the document is at least one point taller than the visible area.
+            private func ensureScrollableRubberBand(in scrollView: NSScrollView) {
+                guard let document = scrollView.documentView else { return }
+
+                let visibleHeight = scrollView.contentView.bounds.height
+                if document.frame.height <= visibleHeight {
+                    document.frame.size.height = visibleHeight + 1
+                }
             }
 
             func closeGap() {
