@@ -187,6 +187,10 @@ func sanitizedPullDistance(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
                 } catch {
                     // Always clear the refresh UI; callers own error presentation.
                 }
+                // A cancelled task must not clear a newer refresh that started after
+                // onDisappear (or another cancel) handed off to a fresh Task.
+                guard !Task.isCancelled else { return }
+
                 isRefreshing = false
                 refreshTask = nil
             }
