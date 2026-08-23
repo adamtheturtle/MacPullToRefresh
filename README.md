@@ -31,6 +31,7 @@ Add the `MacPullToRefresh` product to your target dependencies.
 
 - Swift 6.2+
 - macOS 13+ or iOS 16+
+- visionOS is not a supported platform (see DocC platform support)
 
 ## License
 
