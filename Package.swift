@@ -1,4 +1,4 @@
-// swift-tools-version: 6.2
+// swift-tools-version: 5.9
 import Foundation
 import PackageDescription
 
@@ -24,8 +24,6 @@ let package = Package(
                 .process("Localizable.xcstrings")
             ],
             swiftSettings: [
-                .swiftLanguageMode(.v6),
-                .defaultIsolation(MainActor.self),
                 .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
                 .enableUpcomingFeature("InferIsolatedConformances")
             ]
@@ -34,8 +32,6 @@ let package = Package(
             name: "Demo",
             dependencies: ["MacPullToRefresh"],
             swiftSettings: [
-                .swiftLanguageMode(.v6),
-                .defaultIsolation(MainActor.self),
                 .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
                 .enableUpcomingFeature("InferIsolatedConformances")
             ]
@@ -44,8 +40,6 @@ let package = Package(
             name: "MacPullToRefreshTests",
             dependencies: ["MacPullToRefresh"],
             swiftSettings: [
-                .swiftLanguageMode(.v6),
-                .defaultIsolation(MainActor.self),
                 .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
                 .enableUpcomingFeature("InferIsolatedConformances")
             ]
