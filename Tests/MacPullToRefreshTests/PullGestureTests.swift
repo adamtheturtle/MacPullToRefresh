@@ -321,6 +321,29 @@
         }
 
         @Test
+        func `releasing at the gap rest during refresh does not count as a second pull`() {
+            let harness = PullHarness()
+            var triggered = 0
+            harness.coordinator.onTrigger = { triggered += 1 }
+
+            harness.beginPull()
+            harness.drag(past: 60)
+            harness.release()
+            #expect(triggered == 1)
+
+            harness.coordinator.setRefreshing(true)
+            harness.coordinator.wasRefreshing = true
+
+            harness.beginPull()
+            harness.drag(past: harness.threshold)
+            harness.release()
+
+            #expect(triggered == 1)
+            #expect(harness.coordinator.currentPull == 0)
+            #expect(harness.coordinator.gapOpen)
+        }
+
+        @Test
         func `releasing past the threshold triggers a refresh`() {
             let harness = PullHarness()
             var triggered = 0
