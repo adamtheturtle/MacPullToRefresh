@@ -91,26 +91,45 @@ public extension View {
     /// .macPullToRefresh(trigger: refreshTick) { await load() }
     /// Button("Refresh") { refreshTick &+= 1 }
     /// ```
+    ///
+    /// - Parameters:
+    ///   - trigger: Equatable value; each change after appear starts a refresh.
+    ///   - threshold: Points past the top required to arm a refresh on macOS. Values that
+    ///     are not finite or are `<= 0` fall back to `44`. Ignored on iOS.
+    ///   - refreshGap: Top inset held open while a refresh runs on macOS. Values that are
+    ///     not finite or are `<= 0` fall back to the sanitized `threshold`. Ignored on iOS.
+    ///   - isEnabled: When `false`, the modifier is a no-op.
+    ///   - action: Async work to run on pull or trigger. Throwing actions are supported.
+    @ViewBuilder
     func macPullToRefresh<Trigger: Equatable>(
         trigger: Trigger,
+        threshold: CGFloat = 44,
+        refreshGap: CGFloat = 44,
+        isEnabled: Bool = true,
         _ action: @escaping () async throws -> Void
     ) -> some View {
-        #if os(macOS)
-            return modifier(MacPullToRefresh(
-                action: action,
-                trigger: Optional(trigger),
-                threshold: 44,
-                refreshGap: 44,
-                isEnabled: true,
-                indicator: HostedIndicator.init
-            ))
-        #else
-            return modifier(IOSPullToRefresh(
-                isEnabled: true,
-                trigger: Optional(trigger),
-                action: action
-            ))
-        #endif
+        if isEnabled {
+            #if os(macOS)
+                let safeThreshold = sanitizedPullDistance(threshold, fallback: 44)
+                let safeGap = sanitizedPullDistance(refreshGap, fallback: safeThreshold)
+                modifier(MacPullToRefresh(
+                    action: action,
+                    trigger: Optional(trigger),
+                    threshold: safeThreshold,
+                    refreshGap: safeGap,
+                    isEnabled: true,
+                    indicator: HostedIndicator.init
+                ))
+            #else
+                modifier(IOSPullToRefresh(
+                    isEnabled: true,
+                    trigger: Optional(trigger),
+                    action: action
+                ))
+            #endif
+        } else {
+            self
+        }
     }
 }
 
