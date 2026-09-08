@@ -2,8 +2,7 @@
 
 This file documents project changes.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
-adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
@@ -11,10 +10,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Restore scroll view insets, elasticity, and bounds notifications when the modifier
-  detaches mid-refresh or mid-animation.
-- Expose VoiceOver status for the refresh indicator and announce refresh start and
-  completion.
+- Restore scroll view insets, elasticity, and bounds notifications when the modifier detaches mid-refresh or mid-animation.
+- Expose VoiceOver status for the refresh indicator and announce refresh start and completion.
 - Honor Reduce Motion by skipping continuous indicator rotation.
 
 ## [0.4.0] - 2026-07-18
