@@ -1,6 +1,5 @@
 # Changelog
 
-This file documents project changes.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -19,7 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - Cancel a pull when the user drags back to the top before releasing.
-- Keep the baseline top inset stable if a scroll starts during gap-close animation.
+- Preserve the initial top inset when scrolling starts as the gap closes.
 - Avoid a one-frame spinner blink at the hand-off from pull to refresh.
 
 ## [0.3.1] - 2026-07-02
