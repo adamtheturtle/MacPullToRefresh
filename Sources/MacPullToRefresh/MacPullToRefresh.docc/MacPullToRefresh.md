@@ -33,7 +33,8 @@ On macOS, attach the modifier to the scrollable container itself:
 - Prefer `.macPullToRefresh { ... }` on the `List` or `ScrollView` that should refresh.
 - Avoid wrapping an outer `VStack` or navigation chrome and expecting the inner list to rubber-band: the bridge locates the nearest `NSScrollView` under the modified view.
 - A `ScrollView`'s `.background` lands inside its scroll view, so the enclosing scroll view is used directly.
-  A `List` places the background outside its scroll view, so the bridge falls back to the smallest window scroll view whose frame contains the helper.
+  A `List` places the background outside its scroll view.
+  The bridge uses the smallest scroll view in the window whose frame contains the helper.
 
 ## MainActor isolation
 
@@ -53,7 +54,7 @@ Attach the modifier directly to the scrollable container you want to refresh:
 | `Form` / grouped `List` style | Supported when backed by a scroll view. Attach to the form or list itself. |
 | `Table` / `OutlineGroup` | Supported when AppKit provides an `NSScrollView` under the modified view. |
 | `NavigationSplitView` detail | Supported. Lookup is scoped to the helper's window and smallest scroll view at the helper's point, so sidebar lists are not picked by mistake. |
-| `ScrollView` + pinned section headers | Supported. The bridge tracks the scroll view hosting the modified content. Keep the modifier on the same `ScrollView` that owns the pinned header. |
+| `ScrollView` + pinned section headers | Supported. The bridge tracks the scroll view hosting the modified content. Keep the modifier on the `ScrollView` with the pinned header. |
 
 ## RTL layout
 
