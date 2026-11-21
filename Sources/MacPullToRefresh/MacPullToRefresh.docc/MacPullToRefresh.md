@@ -33,7 +33,8 @@ On macOS, attach the modifier to the scrollable container itself:
 - Prefer `.macPullToRefresh { ... }` on the `List` or `ScrollView` that should refresh.
 - Avoid wrapping an outer `VStack` or navigation chrome and expecting the inner list to rubber-band: the bridge locates the nearest `NSScrollView` under the modified view.
 - A `ScrollView`'s `.background` lands inside its scroll view, so the enclosing scroll view is used directly.
-  A `List` places the background outside its scroll view. The bridge uses the smallest scroll view in the window whose frame contains the helper.
+  A `List` places the background outside its scroll view.
+  The bridge uses the smallest scroll view in the window whose frame contains the helper.
 
 ## MainActor isolation
 
